@@ -213,8 +213,12 @@ $body
     return 'rgba($r,$g,$b,${a.toStringAsFixed(3)})';
   }
 
-  String _cssString(String value) =>
-      "'${value.replaceAll(r"\", r"\\").replaceAll("'", r"\'")}'";
+  String _cssString(String value) {
+    final escaped = value
+        .replaceAll('\\', '\\\\')
+        .replaceAll("'", "\\'");
+    return "'$escaped'";
+  }
 
   String _escape(String value) => value
       .replaceAll('&', '&amp;')
