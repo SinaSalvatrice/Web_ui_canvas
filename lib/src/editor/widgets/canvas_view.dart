@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -259,6 +260,8 @@ class _CanvasViewState extends State<CanvasView> {
         !widget.previewMode && controller.selectedIds.contains(element.id);
     final primary =
         selected && controller.selectedId == element.id;
+    final cropping =
+        primary && controller.isCropping(element.id);
 
     return Positioned(
       left: element.x,
@@ -267,8 +270,16 @@ class _CanvasViewState extends State<CanvasView> {
       height: element.height,
       child: Transform.rotate(
         angle: element.rotation,
-        child: GestureDetector(
+        child: MouseRegion(
+          cursor: cropping
+              ? SystemMouseCursors.move
+              : SystemMouseCursors.basic,
+          child: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onDoubleTap: widget.previewMode ||
+                  element.type != WebElementType.image
+              ? null
+              : () => _replaceImage(element),
           onTap: widget.previewMode
               ? null
               : () {
@@ -303,11 +314,15 @@ class _CanvasViewState extends State<CanvasView> {
                 },
           onPanUpdate: widget.previewMode || element.locked
               ? null
-              : (details) => controller.moveBy(
-                    element.id,
-                    details.delta.dx / _scale,
-                    details.delta.dy / _scale,
-                  ),
+              : (details) {
+                  final dx = details.delta.dx / _scale;
+                  final dy = details.delta.dy / _scale;
+                  if (controller.isCropping(element.id)) {
+                    controller.panImage(element.id, dx, dy);
+                  } else {
+                    controller.moveBy(element.id, dx, dy);
+                  }
+                },
           onPanEnd: widget.previewMode || element.locked
               ? null
               : (_) => controller.commitLiveEdit(),
@@ -328,13 +343,52 @@ class _CanvasViewState extends State<CanvasView> {
                   child: _render(element),
                 ),
               ),
-              if (primary && !element.locked) ...[
+              if (cropping)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.tertiary,
+                          width: 3 / _scale,
+                        ),
+                      ),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: Container(
+                          margin: EdgeInsets.all(6 / _scale),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8 / _scale,
+                            vertical: 4 / _scale,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .tertiaryContainer
+                                .withValues(alpha: .92),
+                            borderRadius:
+                                BorderRadius.circular(5 / _scale),
+                          ),
+                          child: Text(
+                            'CROP · drag image',
+                            style: TextStyle(
+                              fontSize: 11 / _scale,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (primary && !element.locked && !cropping) ...[
                 for (final handle in _ResizeHandle.values)
                   _resizeHandle(element, handle),
                 _rotationHandle(element),
               ],
             ],
           ),
+        ),
         ),
       ),
     );
@@ -358,6 +412,29 @@ class _CanvasViewState extends State<CanvasView> {
         Offset.zero & overlay.size,
       ),
       items: [
+        if (element.type == WebElementType.image) ...[
+          PopupMenuItem(
+            value: _CanvasContextAction.crop,
+            child: ListTile(
+              dense: true,
+              leading: const Icon(Icons.crop_outlined),
+              title: Text(
+                controller.isCropping(element.id)
+                    ? 'Finish crop'
+                    : 'Crop image',
+              ),
+            ),
+          ),
+          const PopupMenuItem(
+            value: _CanvasContextAction.replaceImage,
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.image_outlined),
+              title: Text('Replace image'),
+            ),
+          ),
+          const PopupMenuDivider(),
+        ],
         const PopupMenuItem(
           value: _CanvasContextAction.copy,
           child: ListTile(
@@ -413,6 +490,16 @@ class _CanvasViewState extends State<CanvasView> {
     );
 
     switch (action) {
+      case _CanvasContextAction.crop:
+        if (controller.isCropping(element.id)) {
+          controller.exitCropMode();
+        } else {
+          controller.enterCropMode(element.id);
+        }
+        break;
+      case _CanvasContextAction.replaceImage:
+        await _replaceImage(element);
+        break;
       case _CanvasContextAction.copy:
         controller.copySelected();
         break;
@@ -434,6 +521,34 @@ class _CanvasViewState extends State<CanvasView> {
       case null:
         break;
     }
+  }
+
+  Future<void> _replaceImage(WebElement element) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      dialogTitle: 'Choose image',
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+
+    WebElement? current;
+    for (final candidate in widget.controller.activePage.elements) {
+      if (candidate.id == element.id) {
+        current = candidate;
+        break;
+      }
+    }
+    if (current == null) return;
+
+    widget.controller.updateElement(
+      current.copyWith(
+        imagePath: path,
+        imagePositionX: 0,
+        imagePositionY: 0,
+        imageScale: 1,
+      ),
+    );
   }
 
   Widget _resizeHandle(WebElement element, _ResizeHandle handle) {
@@ -574,14 +689,24 @@ class _CanvasViewState extends State<CanvasView> {
       final path = element.imagePath;
       final file = path == null ? null : File(path);
       content = file != null && file.existsSync()
-          ? Image.file(
-              file,
-              fit: _boxFit(element.imageFit),
-              alignment: Alignment(
-                element.imagePositionX.clamp(-1.0, 1.0).toDouble(),
-                element.imagePositionY.clamp(-1.0, 1.0).toDouble(),
+          ? ClipRect(
+              child: Transform.scale(
+                scale: element.imageScale.clamp(.25, 5.0).toDouble(),
+                alignment: Alignment.center,
+                child: Image.file(
+                  file,
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: _boxFit(element.imageFit),
+                  alignment: Alignment(
+                    element.imagePositionX.clamp(-1.0, 1.0).toDouble(),
+                    element.imagePositionY.clamp(-1.0, 1.0).toDouble(),
+                  ),
+                  filterQuality: FilterQuality.high,
+                  isAntiAlias: true,
+                  errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                ),
               ),
-              errorBuilder: (_, __, ___) => _imagePlaceholder(),
             )
           : _imagePlaceholder();
     } else if (element.type == WebElementType.divider) {
@@ -722,6 +847,8 @@ class _CanvasViewState extends State<CanvasView> {
 }
 
 enum _CanvasContextAction {
+  crop,
+  replaceImage,
   copy,
   paste,
   duplicate,

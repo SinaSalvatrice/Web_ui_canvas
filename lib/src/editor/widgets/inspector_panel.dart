@@ -121,11 +121,49 @@ class InspectorPanel extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 8),
-          FilledButton.tonalIcon(
-            onPressed: () => _pickImage(element),
-            icon: const Icon(Icons.folder_open),
-            label: const Text('Choose image'),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => _pickImage(element),
+                  icon: const Icon(Icons.image_outlined),
+                  label: const Text('Replace'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: element.locked
+                      ? null
+                      : () {
+                          if (controller.isCropping(element.id)) {
+                            controller.exitCropMode();
+                          } else {
+                            controller.enterCropMode(element.id);
+                          }
+                        },
+                  icon: Icon(
+                    controller.isCropping(element.id)
+                        ? Icons.check
+                        : Icons.crop_outlined,
+                  ),
+                  label: Text(
+                    controller.isCropping(element.id)
+                        ? 'Done'
+                        : 'Crop',
+                  ),
+                ),
+              ),
+            ],
           ),
+          if (controller.isCropping(element.id))
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Drag the image directly on the canvas to move the crop.',
+              ),
+            ),
+          const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: element.imageFit,
             decoration: const InputDecoration(labelText: 'Image fit'),
@@ -133,11 +171,77 @@ class InspectorPanel extends StatelessWidget {
               DropdownMenuItem(value: 'cover', child: Text('Cover')),
               DropdownMenuItem(value: 'contain', child: Text('Contain')),
               DropdownMenuItem(value: 'fill', child: Text('Fill')),
-              DropdownMenuItem(value: 'none', child: Text('None')),
+              DropdownMenuItem(value: 'none', child: Text('Original')),
             ],
             onChanged: (value) {
               if (value != null) _update(element.copyWith(imageFit: value));
             },
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Image zoom · ${(element.imageScale * 100).round()}%',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          Slider(
+            value: element.imageScale.clamp(.25, 5.0).toDouble(),
+            min: .25,
+            max: 5,
+            divisions: 95,
+            onChanged: element.locked
+                ? null
+                : (value) => controller.updateElement(
+                      element.copyWith(imageScale: value),
+                      commit: false,
+                    ),
+            onChangeEnd: element.locked
+                ? null
+                : (_) => controller.commitLiveEdit(),
+          ),
+          _number(
+            'Image zoom %',
+            element.imageScale * 100,
+            (value) => _update(
+              element.copyWith(
+                imageScale: (value / 100).clamp(.25, 5.0).toDouble(),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _number(
+                  'Focus X %',
+                  element.imagePositionX * 100,
+                  (value) => _update(
+                    element.copyWith(
+                      imagePositionX:
+                          (value / 100).clamp(-1.0, 1.0).toDouble(),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _number(
+                  'Focus Y %',
+                  element.imagePositionY * 100,
+                  (value) => _update(
+                    element.copyWith(
+                      imagePositionY:
+                          (value / 100).clamp(-1.0, 1.0).toDouble(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => controller.resetImageCrop(element.id),
+              icon: const Icon(Icons.restart_alt),
+              label: const Text('Reset crop'),
+            ),
           ),
         ],
         if (element.type == WebElementType.button ||
@@ -326,7 +430,14 @@ class InspectorPanel extends StatelessWidget {
     );
     final path = file?.path;
     if (path != null) {
-      _update(element.copyWith(imagePath: path));
+      _update(
+        element.copyWith(
+          imagePath: path,
+          imagePositionX: 0,
+          imagePositionY: 0,
+          imageScale: 1,
+        ),
+      );
     }
   }
 

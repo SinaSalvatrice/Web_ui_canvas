@@ -13,6 +13,9 @@ void main() {
       width: 300,
       height: 80,
       text: 'Hello',
+      imagePositionX: -.4,
+      imagePositionY: .35,
+      imageScale: 2.25,
     );
     const page = WebPage(
       id: 'home',
@@ -34,5 +37,9 @@ void main() {
     expect(restored.name, 'Demo');
     expect(restored.pages.single.elements.single.text, 'Hello');
     expect(restored.pages.single.width, 1440);
+    final restoredElement = restored.pages.single.elements.single;
+    expect(restoredElement.imagePositionX, -.4);
+    expect(restoredElement.imagePositionY, .35);
+    expect(restoredElement.imageScale, 2.25);
   });
 }
