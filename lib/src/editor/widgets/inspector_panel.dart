@@ -106,6 +106,94 @@ class InspectorPanel extends StatelessWidget {
           ),
         ),
         const Divider(height: 26),
+        _section(context, 'Arrange'),
+        Text(
+          controller.selectedIds.length == 1
+              ? 'Align to canvas'
+              : 'Align selected elements',
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            _arrangeButton(
+              context,
+              tooltip: 'Align left',
+              icon: Icons.align_horizontal_left,
+              onPressed: () =>
+                  controller.alignSelection(SelectionAlignment.left),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align horizontal center',
+              icon: Icons.align_horizontal_center,
+              onPressed: () => controller.alignSelection(
+                SelectionAlignment.horizontalCenter,
+              ),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align right',
+              icon: Icons.align_horizontal_right,
+              onPressed: () =>
+                  controller.alignSelection(SelectionAlignment.right),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align top',
+              icon: Icons.align_vertical_top,
+              onPressed: () =>
+                  controller.alignSelection(SelectionAlignment.top),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align vertical center',
+              icon: Icons.align_vertical_center,
+              onPressed: () => controller.alignSelection(
+                SelectionAlignment.verticalCenter,
+              ),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align bottom',
+              icon: Icons.align_vertical_bottom,
+              onPressed: () =>
+                  controller.alignSelection(SelectionAlignment.bottom),
+            ),
+          ],
+        ),
+        if (controller.selectedIds.length >= 3) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Distribute',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 4,
+            children: [
+              _arrangeButton(
+                context,
+                tooltip: 'Distribute horizontally',
+                icon: Icons.space_bar,
+                onPressed: () => controller.distributeSelection(
+                  SelectionDistribution.horizontal,
+                ),
+              ),
+              _arrangeButton(
+                context,
+                tooltip: 'Distribute vertically',
+                icon: Icons.swap_vert,
+                onPressed: () => controller.distributeSelection(
+                  SelectionDistribution.vertical,
+                ),
+              ),
+            ],
+          ),
+        ],
+        const Divider(height: 26),
         _section(context, 'Content'),
         if (element.type != WebElementType.image &&
             element.type != WebElementType.divider)
@@ -403,6 +491,22 @@ class InspectorPanel extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _arrangeButton(
+    BuildContext context, {
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton.filledTonal(
+        visualDensity: VisualDensity.compact,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+      ),
     );
   }
 
