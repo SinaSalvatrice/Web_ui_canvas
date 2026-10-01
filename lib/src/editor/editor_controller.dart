@@ -746,7 +746,11 @@ class EditorController extends ChangeNotifier {
     if (_selectedIds.isEmpty) return;
     final page = activePage;
     final elements = page.elements.map((raw) {
-      if (!_selectedIds.contains(raw.id) || raw.locked) return raw;
+      if (!_selectedIds.contains(raw.id) ||
+          raw.locked ||
+          isAutoLayoutManaged(raw.id)) {
+        return raw;
+      }
       final resolved = resolveElement(raw);
       return _withResolvedGeometry(
         raw,
@@ -813,14 +817,32 @@ class EditorController extends ChangeNotifier {
     final screenShiftX = shiftX * c - shiftY * s;
     final screenShiftY = shiftX * s + shiftY * c;
 
-    _writeResolvedGeometry(
-      raw,
-      x: isAutoLayoutManaged(id) ? element.x : element.x + screenShiftX,
-      y: isAutoLayoutManaged(id) ? element.y : element.y + screenShiftY,
-      width: width,
-      height: height,
-      commit: false,
-    );
+    if (isAutoLayoutManaged(id)) {
+      if (_activeBreakpoint == WebBreakpoint.desktop) {
+        updateElement(
+          raw.copyWith(width: width, height: height),
+          commit: false,
+        );
+      } else {
+        _updateBreakpointOverride(
+          raw,
+          (override) => override.copyWith(
+            width: width,
+            height: height,
+          ),
+          commit: false,
+        );
+      }
+    } else {
+      _writeResolvedGeometry(
+        raw,
+        x: element.x + screenShiftX,
+        y: element.y + screenShiftY,
+        width: width,
+        height: height,
+        commit: false,
+      );
+    }
   }
 
   void commitLiveEdit() {
@@ -881,7 +903,9 @@ class EditorController extends ChangeNotifier {
   }
 
   void alignSelection(SelectionAlignment alignment) {
-    final selected = resolvedSelectedElements;
+    final selected = resolvedSelectedElements
+        .where((element) => !isAutoLayoutManaged(element.id))
+        .toList(growable: false);
     if (selected.isEmpty) return;
 
     final page = activePage;
@@ -939,7 +963,10 @@ class EditorController extends ChangeNotifier {
 
   void distributeSelection(SelectionDistribution distribution) {
     final selected = resolvedSelectedElements
-        .where((element) => !element.locked)
+        .where(
+          (element) =>
+              !element.locked && !isAutoLayoutManaged(element.id),
+        )
         .toList(growable: false);
     if (selected.length < 3) return;
 
