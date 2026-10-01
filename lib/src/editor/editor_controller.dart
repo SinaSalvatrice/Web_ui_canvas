@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
+import '../model/responsive.dart';
+import '../model/responsive_layout.dart';
 
 enum SelectionAlignment {
   left,
@@ -35,6 +37,7 @@ class EditorController extends ChangeNotifier {
   List<WebElement> _clipboard = const <WebElement>[];
   int _pasteGeneration = 0;
   String? _cropElementId;
+  WebBreakpoint _activeBreakpoint = WebBreakpoint.desktop;
 
   bool gridEnabled = true;
   bool snapEnabled = false;
@@ -48,6 +51,11 @@ class EditorController extends ChangeNotifier {
   bool get canPaste => _clipboard.isNotEmpty;
   String? get cropElementId => _cropElementId;
   bool get isCropMode => _cropElementId != null;
+  WebBreakpoint get activeBreakpoint => _activeBreakpoint;
+  double get viewportWidth => _activeBreakpoint == WebBreakpoint.desktop
+      ? activePage.width
+      : _activeBreakpoint.previewWidth;
+  double get viewportHeight => activePage.height;
   bool get canUndo => _historyIndex > 0;
   bool get canRedo => _historyIndex < _history.length - 1;
 
@@ -65,18 +73,322 @@ class EditorController extends ChangeNotifier {
       .where((element) => _selectedIds.contains(element.id))
       .toList(growable: false);
 
+  WebElement? get resolvedSelectedElement {
+    final element = selectedElement;
+    return element == null ? null : resolveElement(element);
+  }
+
+  List<WebElement> get resolvedSelectedElements => selectedElements
+      .map(resolveElement)
+      .toList(growable: false);
+
   void replaceProject(WebProject project) {
     _project = project;
     _clearSelectionState();
     _cropElementId = null;
     _clipboard = const <WebElement>[];
     _pasteGeneration = 0;
+    _activeBreakpoint = WebBreakpoint.desktop;
     _nextId = _project.pages.expand((page) => page.elements).length + 1;
     _history
       ..clear()
       ..add(project);
     _historyIndex = 0;
     notifyListeners();
+  }
+
+  void setActiveBreakpoint(WebBreakpoint breakpoint) {
+    if (_activeBreakpoint == breakpoint) return;
+    _activeBreakpoint = breakpoint;
+    _cropElementId = null;
+    notifyListeners();
+  }
+
+  WebElementBreakpointOverride effectiveOverride(
+    WebElement element, [
+    WebBreakpoint? breakpoint,
+  ]) =>
+      ResponsiveLayoutResolver.effectiveOverride(
+        element,
+        breakpoint ?? _activeBreakpoint,
+      );
+
+  WebElement resolveElement(
+    WebElement element, {
+    WebBreakpoint? breakpoint,
+  }) =>
+      ResponsiveLayoutResolver.resolve(
+        element,
+        activePage,
+        breakpoint ?? _activeBreakpoint,
+      );
+
+  void resetActiveBreakpointOverrides(String id) {
+    if (_activeBreakpoint == WebBreakpoint.desktop) return;
+    final element = _elementById(id);
+    if (element == null) return;
+    final map = Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+      element.responsiveOverrides,
+    )..remove(_activeBreakpoint);
+    updateElement(element.copyWith(responsiveOverrides: map));
+  }
+
+  void setAnchorX(String id, String value) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(raw.copyWith(anchorX: value));
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(anchorX: value),
+    );
+  }
+
+  void setAnchorY(String id, String value) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(raw.copyWith(anchorY: value));
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(anchorY: value),
+    );
+  }
+
+  void setWidthMode(String id, WebSizeMode mode) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    final resolved = resolveElement(raw);
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(
+        raw.copyWith(
+          widthMode: mode,
+          widthPercent: mode == WebSizeMode.percent
+              ? resolved.width / math.max(1.0, viewportWidth)
+              : raw.widthPercent,
+        ),
+      );
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(
+        widthMode: mode,
+        widthPercent: mode == WebSizeMode.percent
+            ? resolved.width / math.max(1.0, viewportWidth)
+            : null,
+      ),
+    );
+  }
+
+  void setHeightMode(String id, WebSizeMode mode) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    final resolved = resolveElement(raw);
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(
+        raw.copyWith(
+          heightMode: mode,
+          heightPercent: mode == WebSizeMode.percent
+              ? resolved.height / math.max(1.0, viewportHeight)
+              : raw.heightPercent,
+        ),
+      );
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(
+        heightMode: mode,
+        heightPercent: mode == WebSizeMode.percent
+            ? resolved.height / math.max(1.0, viewportHeight)
+            : null,
+      ),
+    );
+  }
+
+  void setWidthPercent(String id, double value) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    final percent = value.clamp(.01, 2.0).toDouble();
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(raw.copyWith(widthPercent: percent));
+    } else {
+      _updateBreakpointOverride(
+        raw,
+        (override) => override.copyWith(widthPercent: percent),
+      );
+    }
+  }
+
+  void setHeightPercent(String id, double value) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    final percent = value.clamp(.01, 2.0).toDouble();
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(raw.copyWith(heightPercent: percent));
+    } else {
+      _updateBreakpointOverride(
+        raw,
+        (override) => override.copyWith(heightPercent: percent),
+      );
+    }
+  }
+
+  void setSizeConstraints(
+    String id, {
+    double? minWidth,
+    bool clearMinWidth = false,
+    double? maxWidth,
+    bool clearMaxWidth = false,
+    double? minHeight,
+    bool clearMinHeight = false,
+    double? maxHeight,
+    bool clearMaxHeight = false,
+  }) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(
+        raw.copyWith(
+          minWidth: minWidth,
+          clearMinWidth: clearMinWidth,
+          maxWidth: maxWidth,
+          clearMaxWidth: clearMaxWidth,
+          minHeight: minHeight,
+          clearMinHeight: clearMinHeight,
+          maxHeight: maxHeight,
+          clearMaxHeight: clearMaxHeight,
+        ),
+      );
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(
+        minWidth: minWidth,
+        clearMinWidth: clearMinWidth,
+        maxWidth: maxWidth,
+        clearMaxWidth: clearMaxWidth,
+        minHeight: minHeight,
+        clearMinHeight: clearMinHeight,
+        maxHeight: maxHeight,
+        clearMaxHeight: clearMaxHeight,
+      ),
+    );
+  }
+
+  void updateResolvedGeometry(
+    String id, {
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    bool commit = true,
+  }) {
+    final raw = _elementById(id);
+    if (raw == null || raw.locked) return;
+    final resolved = resolveElement(raw);
+    _writeResolvedGeometry(
+      raw,
+      x: x ?? resolved.x,
+      y: y ?? resolved.y,
+      width: width ?? resolved.width,
+      height: height ?? resolved.height,
+      commit: commit,
+    );
+  }
+
+  void _writeResolvedGeometry(
+    WebElement raw, {
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+    required bool commit,
+  }) {
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(
+        raw.copyWith(
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        ),
+        commit: commit,
+      );
+      return;
+    }
+
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+      ),
+      commit: commit,
+    );
+  }
+
+  WebElement _withResolvedGeometry(
+    WebElement raw, {
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+  }) {
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      return raw.copyWith(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+      );
+    }
+
+    final map = Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+      raw.responsiveOverrides,
+    );
+    final current =
+        map[_activeBreakpoint] ?? const WebElementBreakpointOverride();
+    map[_activeBreakpoint] = current.copyWith(
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+    );
+    return raw.copyWith(responsiveOverrides: map);
+  }
+
+  void _updateBreakpointOverride(
+    WebElement raw,
+    WebElementBreakpointOverride Function(
+      WebElementBreakpointOverride override,
+    ) update, {
+    bool commit = true,
+  }) {
+    if (_activeBreakpoint == WebBreakpoint.desktop) return;
+    final map = Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+      raw.responsiveOverrides,
+    );
+    final current =
+        map[_activeBreakpoint] ?? const WebElementBreakpointOverride();
+    final next = update(current);
+    if (next.isEmpty) {
+      map.remove(_activeBreakpoint);
+    } else {
+      map[_activeBreakpoint] = next;
+    }
+    updateElement(
+      raw.copyWith(responsiveOverrides: map),
+      commit: commit,
+    );
   }
 
   void select(String? id) => selectOnly(id);
@@ -189,14 +501,35 @@ class EditorController extends ChangeNotifier {
 
   void addElement(WebElementType type, {double? x, double? y}) {
     final page = activePage;
-    final defaultX =
+    final desktopX =
         math.max(24.0, (page.width - type.defaultWidth) / 2).toDouble();
-    final element = WebElement.fresh(
+    final targetWidth = viewportWidth;
+    final targetX = snap(
+      x ?? math.max(24.0, (targetWidth - type.defaultWidth) / 2).toDouble(),
+    );
+    final targetY = snap(y ?? 80.0 + page.elements.length * 28.0);
+
+    var element = WebElement.fresh(
       id: 'element_${_nextId++}',
       type: type,
-      x: snap(x ?? defaultX),
-      y: snap(y ?? 80.0 + page.elements.length * 28.0),
+      x: _activeBreakpoint == WebBreakpoint.desktop ? targetX : desktopX,
+      y: targetY,
     );
+
+    if (_activeBreakpoint != WebBreakpoint.desktop) {
+      final fittedWidth =
+          math.min(type.defaultWidth, math.max(32.0, targetWidth - 48));
+      element = element.copyWith(
+        responsiveOverrides: {
+          _activeBreakpoint: WebElementBreakpointOverride(
+            x: targetX,
+            y: targetY,
+            width: fittedWidth,
+          ),
+        },
+      );
+    }
+
     _replacePage(
       page.copyWith(elements: [...page.elements, element]),
       commit: true,
@@ -217,8 +550,8 @@ class EditorController extends ChangeNotifier {
   }
 
   void moveBy(String id, double dx, double dy) {
-    final anchor = _elementById(id);
-    if (anchor == null || anchor.locked) return;
+    final anchorRaw = _elementById(id);
+    if (anchorRaw == null || anchorRaw.locked) return;
     if (!_selectedIds.contains(id)) {
       _selectedIds
         ..clear()
@@ -226,6 +559,7 @@ class EditorController extends ChangeNotifier {
       _selectedId = id;
     }
 
+    final anchor = resolveElement(anchorRaw);
     final nextX = snap(anchor.x + dx);
     final nextY = snap(anchor.y + dy);
     final effectiveDx = nextX - anchor.x;
@@ -233,12 +567,15 @@ class EditorController extends ChangeNotifier {
     if (effectiveDx == 0 && effectiveDy == 0) return;
 
     final page = activePage;
-    final movingIds = _selectedIds;
-    final elements = page.elements.map((element) {
-      if (!movingIds.contains(element.id) || element.locked) return element;
-      return element.copyWith(
-        x: element.x + effectiveDx,
-        y: element.y + effectiveDy,
+    final elements = page.elements.map((raw) {
+      if (!_selectedIds.contains(raw.id) || raw.locked) return raw;
+      final resolved = resolveElement(raw);
+      return _withResolvedGeometry(
+        raw,
+        x: resolved.x + effectiveDx,
+        y: resolved.y + effectiveDy,
+        width: resolved.width,
+        height: resolved.height,
       );
     }).toList();
     _replacePage(page.copyWith(elements: elements), commit: false);
@@ -247,9 +584,16 @@ class EditorController extends ChangeNotifier {
   void nudgeSelection(double dx, double dy) {
     if (_selectedIds.isEmpty) return;
     final page = activePage;
-    final elements = page.elements.map((element) {
-      if (!_selectedIds.contains(element.id) || element.locked) return element;
-      return element.copyWith(x: element.x + dx, y: element.y + dy);
+    final elements = page.elements.map((raw) {
+      if (!_selectedIds.contains(raw.id) || raw.locked) return raw;
+      final resolved = resolveElement(raw);
+      return _withResolvedGeometry(
+        raw,
+        x: resolved.x + dx,
+        y: resolved.y + dy,
+        width: resolved.width,
+        height: resolved.height,
+      );
     }).toList();
     _replacePage(page.copyWith(elements: elements), commit: true);
   }
@@ -263,8 +607,9 @@ class EditorController extends ChangeNotifier {
     required bool top,
     required bool bottom,
   }) {
-    final element = _elementById(id);
-    if (element == null || element.locked) return;
+    final raw = _elementById(id);
+    if (raw == null || raw.locked) return;
+    final element = resolveElement(raw);
 
     final c = math.cos(element.rotation);
     final s = math.sin(element.rotation);
@@ -304,13 +649,12 @@ class EditorController extends ChangeNotifier {
     final screenShiftX = shiftX * c - shiftY * s;
     final screenShiftY = shiftX * s + shiftY * c;
 
-    updateElement(
-      element.copyWith(
-        x: element.x + screenShiftX,
-        y: element.y + screenShiftY,
-        width: width,
-        height: height,
-      ),
+    _writeResolvedGeometry(
+      raw,
+      x: element.x + screenShiftX,
+      y: element.y + screenShiftY,
+      width: width,
+      height: height,
       commit: false,
     );
   }
@@ -373,7 +717,7 @@ class EditorController extends ChangeNotifier {
   }
 
   void alignSelection(SelectionAlignment alignment) {
-    final selected = selectedElements;
+    final selected = resolvedSelectedElements;
     if (selected.isEmpty) return;
 
     final page = activePage;
@@ -384,12 +728,12 @@ class EditorController extends ChangeNotifier {
         ? 0.0
         : selected.map((element) => element.y).reduce(math.min);
     final targetRight = selected.length == 1
-        ? page.width
+        ? viewportWidth
         : selected
             .map((element) => element.x + element.width)
             .reduce(math.max);
     final targetBottom = selected.length == 1
-        ? page.height
+        ? viewportHeight
         : selected
             .map((element) => element.y + element.height)
             .reduce(math.max);
@@ -397,10 +741,11 @@ class EditorController extends ChangeNotifier {
     final targetCenterY = (targetTop + targetBottom) / 2;
 
     final ids = _selectedIds;
-    final elements = page.elements.map((element) {
-      if (!ids.contains(element.id) || element.locked) return element;
+    final elements = page.elements.map((raw) {
+      if (!ids.contains(raw.id) || raw.locked) return raw;
+      final element = resolveElement(raw);
 
-      return switch (alignment) {
+      final next = switch (alignment) {
         SelectionAlignment.left => element.copyWith(x: targetLeft),
         SelectionAlignment.horizontalCenter => element.copyWith(
             x: targetCenterX - element.width / 2,
@@ -416,13 +761,20 @@ class EditorController extends ChangeNotifier {
             y: targetBottom - element.height,
           ),
       };
+      return _withResolvedGeometry(
+        raw,
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+      );
     }).toList();
 
     _replacePage(page.copyWith(elements: elements), commit: true);
   }
 
   void distributeSelection(SelectionDistribution distribution) {
-    final selected = selectedElements
+    final selected = resolvedSelectedElements
         .where((element) => !element.locked)
         .toList(growable: false);
     if (selected.length < 3) return;
@@ -461,9 +813,17 @@ class EditorController extends ChangeNotifier {
         break;
     }
 
-    final elements = page.elements
-        .map((element) => replacements[element.id] ?? element)
-        .toList();
+    final elements = page.elements.map((raw) {
+      final next = replacements[raw.id];
+      if (next == null) return raw;
+      return _withResolvedGeometry(
+        raw,
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+      );
+    }).toList();
     _replacePage(page.copyWith(elements: elements), commit: true);
   }
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -6,6 +7,8 @@ import 'package:path/path.dart' as p;
 import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
+import '../model/responsive.dart';
+import '../model/responsive_layout.dart';
 
 class HtmlExportResult {
   const HtmlExportResult({
@@ -83,7 +86,6 @@ class HtmlExporter {
     Map<String, String> assets,
   ) {
     final body = page.elements
-        .where((element) => element.visible)
         .map((element) => _elementHtml(element, assets))
         .join('\n');
 
@@ -125,6 +127,12 @@ $body
     };
   }
 
+  String buildCssForPage(
+    WebPage page, {
+    Map<String, String> assets = const {},
+  }) =>
+      _css(page, assets);
+
   String _css(WebPage page, Map<String, String> assets) {
     final buffer = StringBuffer();
 
@@ -149,7 +157,7 @@ $body
       ..writeln('body { font-family: Arial, sans-serif; }')
       ..writeln('.webui-page {')
       ..writeln('  position: relative;')
-      ..writeln('  width: ${page.width}px;')
+      ..writeln('  width: min(100%, ${page.width}px);')
       ..writeln('  min-height: ${page.height}px;')
       ..writeln('  margin: 0 auto;')
       ..writeln('  overflow: hidden;')
@@ -157,33 +165,13 @@ $body
       ..writeln('}')
       ..writeln('.webui-element { box-sizing: border-box; position: absolute; }');
 
-    for (final element in page.elements.where((element) => element.visible)) {
-      buffer
-        ..writeln('#${element.id} {')
-        ..writeln('  left: ${element.x}px;')
-        ..writeln('  top: ${element.y}px;')
-        ..writeln('  width: ${element.width}px;')
-        ..writeln('  height: ${element.height}px;')
-        ..writeln('  transform: rotate(${element.rotation}rad);')
-        ..writeln('  opacity: ${element.opacity};')
-        ..writeln('  color: ${_color(element.foregroundColor)};')
-        ..writeln('  font-size: ${element.fontSize}px;')
-        ..writeln('  font-weight: ${element.fontWeight};')
-        ..writeln('  font-family: ${_cssString(element.fontFamily)}, sans-serif;')
-        ..writeln('  letter-spacing: ${element.letterSpacing}px;')
-        ..writeln('  line-height: ${element.lineHeight};')
-        ..writeln('  text-align: ${element.textAlign};')
-        ..writeln('  border-radius: ${element.borderRadius}px;')
-        ..writeln(
-          '  background: ${element.backgroundColor == null ? 'transparent' : _color(element.backgroundColor!)};',
-        )
-        ..writeln(
-          '  border: ${element.borderWidth}px solid ${element.borderColor == null ? 'transparent' : _color(element.borderColor!)};',
-        );
-      if (element.type == WebElementType.image) {
-        buffer.writeln('  overflow: hidden;');
-      }
-      buffer.writeln('}');
+    for (final element in page.elements) {
+      _writeElementRule(
+        buffer,
+        page,
+        element,
+        WebBreakpoint.desktop,
+      );
       if (element.type == WebElementType.image) {
         buffer
           ..writeln('#${element.id} > .webui-image-content {')
@@ -202,7 +190,207 @@ $body
       }
     }
 
+    for (final breakpoint in [
+      WebBreakpoint.tablet,
+      WebBreakpoint.mobile,
+    ]) {
+      buffer
+        ..writeln()
+        ..writeln(
+          '@media (max-width: ${breakpoint.maxViewportWidth!.toStringAsFixed(0)}px) {',
+        );
+      for (final element in page.elements) {
+        _writeElementRule(
+          buffer,
+          page,
+          element,
+          breakpoint,
+          indent: '  ',
+        );
+      }
+      buffer.writeln('}');
+    }
+
     return buffer.toString();
+  }
+
+  void _writeElementRule(
+    StringBuffer buffer,
+    WebPage page,
+    WebElement element,
+    WebBreakpoint breakpoint, {
+    String indent = '',
+  }) {
+    final resolved = ResponsiveLayoutResolver.resolve(
+      element,
+      page,
+      breakpoint,
+    );
+    final targetWidth = breakpoint == WebBreakpoint.desktop
+        ? page.width
+        : breakpoint.previewWidth;
+    final targetHeight = page.height;
+
+    buffer.writeln('$indent#${element.id} {');
+
+    final horizontal = _horizontalPositionDeclarations(
+      resolved,
+      targetWidth,
+    );
+    for (final declaration in horizontal) {
+      buffer.writeln('$indent  $declaration');
+    }
+
+    final vertical = _verticalPositionDeclarations(
+      resolved,
+      targetHeight,
+    );
+    for (final declaration in vertical) {
+      buffer.writeln('$indent  $declaration');
+    }
+
+    final width = switch (resolved.widthMode) {
+      WebSizeMode.percent =>
+        '${(resolved.widthPercent * 100).toStringAsFixed(4)}%',
+      WebSizeMode.hug => 'max-content',
+      WebSizeMode.fill => 'auto',
+      WebSizeMode.fixed => '${resolved.width}px',
+    };
+    final height = switch (resolved.heightMode) {
+      WebSizeMode.percent =>
+        '${(resolved.heightPercent * 100).toStringAsFixed(4)}%',
+      WebSizeMode.hug => 'max-content',
+      WebSizeMode.fill => 'auto',
+      WebSizeMode.fixed => '${resolved.height}px',
+    };
+
+    buffer
+      ..writeln('$indent  width: $width;')
+      ..writeln('$indent  height: $height;');
+
+    if (resolved.minWidth != null) {
+      buffer.writeln('$indent  min-width: ${resolved.minWidth}px;');
+    } else {
+      buffer.writeln('$indent  min-width: 0;');
+    }
+    if (resolved.maxWidth != null) {
+      buffer.writeln('$indent  max-width: ${resolved.maxWidth}px;');
+    } else {
+      buffer.writeln('$indent  max-width: none;');
+    }
+    if (resolved.minHeight != null) {
+      buffer.writeln('$indent  min-height: ${resolved.minHeight}px;');
+    } else {
+      buffer.writeln('$indent  min-height: 0;');
+    }
+    if (resolved.maxHeight != null) {
+      buffer.writeln('$indent  max-height: ${resolved.maxHeight}px;');
+    } else {
+      buffer.writeln('$indent  max-height: none;');
+    }
+
+    final transforms = <String>[];
+    if (resolved.widthMode != WebSizeMode.fill &&
+        resolved.anchorX == 'center') {
+      transforms.add('translateX(-50%)');
+    }
+    if (resolved.heightMode != WebSizeMode.fill &&
+        resolved.anchorY == 'center') {
+      transforms.add('translateY(-50%)');
+    }
+    transforms.add('rotate(${resolved.rotation}rad)');
+
+    buffer
+      ..writeln('$indent  transform: ${transforms.join(' ')};')
+      ..writeln('$indent  opacity: ${resolved.opacity};')
+      ..writeln(
+        '$indent  visibility: ${resolved.visible ? 'visible' : 'hidden'};',
+      )
+      ..writeln(
+        '$indent  pointer-events: ${resolved.visible ? 'auto' : 'none'};',
+      )
+      ..writeln('$indent  color: ${_color(resolved.foregroundColor)};')
+      ..writeln('$indent  font-size: ${resolved.fontSize}px;')
+      ..writeln('$indent  font-weight: ${resolved.fontWeight};')
+      ..writeln(
+        '$indent  font-family: ${_cssString(resolved.fontFamily)}, sans-serif;',
+      )
+      ..writeln('$indent  letter-spacing: ${resolved.letterSpacing}px;')
+      ..writeln('$indent  line-height: ${resolved.lineHeight};')
+      ..writeln('$indent  text-align: ${resolved.textAlign};')
+      ..writeln('$indent  border-radius: ${resolved.borderRadius}px;')
+      ..writeln(
+        '$indent  background: ${resolved.backgroundColor == null ? 'transparent' : _color(resolved.backgroundColor!)};',
+      )
+      ..writeln(
+        '$indent  border: ${resolved.borderWidth}px solid ${resolved.borderColor == null ? 'transparent' : _color(resolved.borderColor!)};',
+      );
+    if (resolved.type == WebElementType.image) {
+      buffer.writeln('$indent  overflow: hidden;');
+    }
+    buffer.writeln('$indent}');
+  }
+
+  List<String> _horizontalPositionDeclarations(
+    WebElement element,
+    double targetWidth,
+  ) {
+    if (element.widthMode == WebSizeMode.fill) {
+      final right = math.max(
+        0.0,
+        targetWidth - (element.x + element.width),
+      );
+      return [
+        'left: ${element.x}px;',
+        'right: $right px;'.replaceAll(' ', ''),
+      ];
+    }
+
+    return switch (element.anchorX) {
+      'center' => [
+          'left: calc(50% + ${element.x + element.width / 2 - targetWidth / 2}px);',
+          'right: auto;',
+        ],
+      'right' => [
+          'left: auto;',
+          'right: ${math.max(0.0, targetWidth - (element.x + element.width))}px;',
+        ],
+      _ => [
+          'left: ${element.x}px;',
+          'right: auto;',
+        ],
+    };
+  }
+
+  List<String> _verticalPositionDeclarations(
+    WebElement element,
+    double targetHeight,
+  ) {
+    if (element.heightMode == WebSizeMode.fill) {
+      final bottom = math.max(
+        0.0,
+        targetHeight - (element.y + element.height),
+      );
+      return [
+        'top: ${element.y}px;',
+        'bottom: $bottom px;'.replaceAll(' ', ''),
+      ];
+    }
+
+    return switch (element.anchorY) {
+      'center' => [
+          'top: calc(50% + ${element.y + element.height / 2 - targetHeight / 2}px);',
+          'bottom: auto;',
+        ],
+      'bottom' => [
+          'top: auto;',
+          'bottom: ${math.max(0.0, targetHeight - (element.y + element.height))}px;',
+        ],
+      _ => [
+          'top: ${element.y}px;',
+          'bottom: auto;',
+        ],
+    };
   }
 
   String _color(int argb) {

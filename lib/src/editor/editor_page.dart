@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../export/html_exporter.dart';
+import '../model/responsive.dart';
 import '../services/font_catalog.dart';
 import '../services/project_storage.dart';
 import 'editor_controller.dart';
@@ -231,17 +232,23 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                   child: const Text('Preview'),
                 ),
                 const PopupMenuDivider(),
-                const PopupMenuItem(
+                CheckedPopupMenuItem(
                   value: 'desktop',
-                  child: Text('Canvas · Desktop 1440'),
+                  checked:
+                      _controller.activeBreakpoint == WebBreakpoint.desktop,
+                  child: const Text('Preview · Desktop'),
                 ),
-                const PopupMenuItem(
+                CheckedPopupMenuItem(
                   value: 'tablet',
-                  child: Text('Canvas · Tablet 900'),
+                  checked:
+                      _controller.activeBreakpoint == WebBreakpoint.tablet,
+                  child: const Text('Preview · Tablet 900'),
                 ),
-                const PopupMenuItem(
+                CheckedPopupMenuItem(
                   value: 'mobile',
-                  child: Text('Canvas · Mobile 390'),
+                  checked:
+                      _controller.activeBreakpoint == WebBreakpoint.mobile,
+                  child: const Text('Preview · Mobile 390'),
                 ),
                 const PopupMenuItem(
                   value: 'custom',
@@ -268,7 +275,7 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Text(
-                page.width.toStringAsFixed(0),
+                _controller.viewportWidth.toStringAsFixed(0),
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ),
@@ -380,13 +387,16 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
         setState(() => _previewMode = !_previewMode);
         break;
       case 'desktop':
-        _controller.setPageSize(1440, page.height);
+        _controller.setActiveBreakpoint(WebBreakpoint.desktop);
+        _viewportController.reset();
         break;
       case 'tablet':
-        _controller.setPageSize(900, page.height);
+        _controller.setActiveBreakpoint(WebBreakpoint.tablet);
+        _viewportController.reset();
         break;
       case 'mobile':
-        _controller.setPageSize(390, page.height);
+        _controller.setActiveBreakpoint(WebBreakpoint.mobile);
+        _viewportController.reset();
         break;
       case 'custom':
         unawaited(_editCanvasSize());
@@ -451,39 +461,40 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
               },
             ),
             const SizedBox(width: 10),
-            PopupMenuButton<String>(
-              tooltip: 'Canvas size',
-              onSelected: (value) {
-                switch (value) {
-                  case 'desktop':
-                    _controller.setPageSize(1440, page.height);
-                    break;
-                  case 'tablet':
-                    _controller.setPageSize(900, page.height);
-                    break;
-                  case 'mobile':
-                    _controller.setPageSize(390, page.height);
-                    break;
-                  case 'custom':
-                    unawaited(_editCanvasSize());
-                    break;
-                }
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'desktop', child: Text('Desktop · 1440')),
-                PopupMenuItem(value: 'tablet', child: Text('Tablet · 900')),
-                PopupMenuItem(value: 'mobile', child: Text('Mobile · 390')),
-                PopupMenuDivider(),
-                PopupMenuItem(
-                  value: 'custom',
-                  child: Text('Custom size…'),
+            SegmentedButton<WebBreakpoint>(
+              segments: const [
+                ButtonSegment(
+                  value: WebBreakpoint.desktop,
+                  icon: Icon(Icons.desktop_windows_outlined, size: 16),
+                  label: Text('D'),
+                ),
+                ButtonSegment(
+                  value: WebBreakpoint.tablet,
+                  icon: Icon(Icons.tablet_mac_outlined, size: 16),
+                  label: Text('T'),
+                ),
+                ButtonSegment(
+                  value: WebBreakpoint.mobile,
+                  icon: Icon(Icons.phone_android_outlined, size: 16),
+                  label: Text('M'),
                 ),
               ],
-              child: Chip(
-                label: Text(
-                  '${page.width.toStringAsFixed(0)} × ${page.height.toStringAsFixed(0)}',
-                ),
-              ),
+              selected: {_controller.activeBreakpoint},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) {
+                _controller.setActiveBreakpoint(selection.first);
+                _viewportController.reset();
+              },
+            ),
+            IconButton(
+              tooltip: 'Desktop canvas size',
+              onPressed: _editCanvasSize,
+              icon: const Icon(Icons.aspect_ratio, size: 18),
+            ),
+            Text(
+              '${_controller.viewportWidth.toStringAsFixed(0)} × '
+              '${_controller.viewportHeight.toStringAsFixed(0)}',
+              style: Theme.of(context).textTheme.labelSmall,
             ),
             const SizedBox(width: 8),
             AnimatedBuilder(

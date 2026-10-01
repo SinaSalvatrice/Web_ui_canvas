@@ -99,6 +99,12 @@ class _CanvasViewState extends State<CanvasView> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final page = controller.activePage;
+    final pageWidth = controller.viewportWidth;
+    final pageHeight = controller.viewportHeight;
+    final resolvedElements = page.elements
+        .map(controller.resolveElement)
+        .where((element) => element.visible)
+        .toList(growable: false);
     final touchMode = MediaQuery.sizeOf(context).shortestSide < 700;
 
     if (touchMode && !_didInitialFit) {
@@ -145,16 +151,16 @@ class _CanvasViewState extends State<CanvasView> {
                 maxScale: 4,
                 boundaryMargin: const EdgeInsets.all(1000),
                 child: SizedBox(
-                  width: page.width + _margin * 2,
-                  height: page.height + _margin * 2,
+                  width: pageWidth + _margin * 2,
+                  height: pageHeight + _margin * 2,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
                       Positioned(
                         left: _margin,
                         top: _margin,
-                        width: page.width,
-                        height: page.height,
+                        width: pageWidth,
+                        height: pageHeight,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: widget.previewMode
@@ -182,9 +188,8 @@ class _CanvasViewState extends State<CanvasView> {
                                       ),
                                     ),
                                   ),
-                                for (final element in page.elements)
-                                  if (element.visible)
-                                    _buildElement(element),
+                                for (final element in resolvedElements)
+                                  _buildElement(element),
                                 if (!widget.previewMode)
                                   Positioned(
                                     left: 0,

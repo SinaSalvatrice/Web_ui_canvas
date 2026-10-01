@@ -9,7 +9,7 @@ class WebProject {
     required this.pages,
   });
 
-  static const currentSchemaVersion = 1;
+  static const currentSchemaVersion = 2;
 
   final int schemaVersion;
   final String id;
@@ -59,11 +59,11 @@ class WebProject {
 
   factory WebProject.fromJson(Map<String, Object?> json) {
     final version = json['schemaVersion'] as int? ?? 0;
-    if (version != currentSchemaVersion) {
+    if (version < 1 || version > currentSchemaVersion) {
       throw FormatException('Unsupported .webui schema version: $version');
     }
     return WebProject(
-      schemaVersion: version,
+      schemaVersion: currentSchemaVersion,
       id: json['id'] as String? ?? 'web_project',
       name: json['name'] as String? ?? 'Website',
       activePageId: json['activePageId']! as String,
