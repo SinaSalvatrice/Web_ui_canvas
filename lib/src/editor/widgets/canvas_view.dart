@@ -163,7 +163,9 @@ class _CanvasViewState extends State<CanvasView> {
   Widget _buildElement(WebElement element) {
     final controller = widget.controller;
     final selected =
-        !widget.previewMode && controller.selectedId == element.id;
+        !widget.previewMode && controller.selectedIds.contains(element.id);
+    final primary =
+        selected && controller.selectedId == element.id;
 
     return Positioned(
       left: element.x,
@@ -174,10 +176,38 @@ class _CanvasViewState extends State<CanvasView> {
         angle: element.rotation,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: widget.previewMode ? null : () => controller.select(element.id),
+          onTap: widget.previewMode
+              ? null
+              : () {
+                  final keyboard = HardwareKeyboard.instance;
+                  final additive =
+                      keyboard.isControlPressed || keyboard.isMetaPressed;
+                  if (additive) {
+                    controller.toggleSelection(element.id);
+                  } else {
+                    controller.selectOnly(element.id);
+                  }
+                },
+          onSecondaryTapDown: widget.previewMode
+              ? null
+              : (details) => _showElementContextMenu(
+                    element,
+                    details.globalPosition,
+                  ),
           onPanStart: widget.previewMode || element.locked
               ? null
-              : (_) => controller.select(element.id),
+              : (_) {
+                  if (!controller.selectedIds.contains(element.id)) {
+                    final keyboard = HardwareKeyboard.instance;
+                    final additive =
+                        keyboard.isControlPressed || keyboard.isMetaPressed;
+                    if (additive) {
+                      controller.toggleSelection(element.id);
+                    } else {
+                      controller.selectOnly(element.id);
+                    }
+                  }
+                },
           onPanUpdate: widget.previewMode || element.locked
               ? null
               : (details) => controller.moveBy(
@@ -205,7 +235,7 @@ class _CanvasViewState extends State<CanvasView> {
                   child: _render(element),
                 ),
               ),
-              if (selected && !element.locked) ...[
+              if (primary && !element.locked) ...[
                 for (final handle in _ResizeHandle.values)
                   _resizeHandle(element, handle),
                 _rotationHandle(element),
@@ -215,6 +245,102 @@ class _CanvasViewState extends State<CanvasView> {
         ),
       ),
     );
+  }
+
+  Future<void> _showElementContextMenu(
+    WebElement element,
+    Offset globalPosition,
+  ) async {
+    final controller = widget.controller;
+    if (!controller.selectedIds.contains(element.id)) {
+      controller.selectOnly(element.id);
+    }
+
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (overlay is! RenderBox) return;
+    final action = await showMenu<_CanvasContextAction>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        const PopupMenuItem(
+          value: _CanvasContextAction.copy,
+          child: ListTile(
+            dense: true,
+            leading: Icon(Icons.copy_outlined),
+            title: Text('Copy'),
+          ),
+        ),
+        PopupMenuItem(
+          value: _CanvasContextAction.paste,
+          enabled: controller.canPaste,
+          child: const ListTile(
+            dense: true,
+            leading: Icon(Icons.content_paste_outlined),
+            title: Text('Paste'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: _CanvasContextAction.duplicate,
+          child: ListTile(
+            dense: true,
+            leading: Icon(Icons.control_point_duplicate_outlined),
+            title: Text('Duplicate'),
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: _CanvasContextAction.forward,
+          child: ListTile(
+            dense: true,
+            leading: Icon(Icons.flip_to_front_outlined),
+            title: Text('Bring forward'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: _CanvasContextAction.backward,
+          child: ListTile(
+            dense: true,
+            leading: Icon(Icons.flip_to_back_outlined),
+            title: Text('Send backward'),
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: _CanvasContextAction.delete,
+          child: ListTile(
+            dense: true,
+            leading: Icon(Icons.delete_outline),
+            title: Text('Delete'),
+          ),
+        ),
+      ],
+    );
+
+    switch (action) {
+      case _CanvasContextAction.copy:
+        controller.copySelected();
+        break;
+      case _CanvasContextAction.paste:
+        controller.pasteCopied();
+        break;
+      case _CanvasContextAction.duplicate:
+        controller.duplicateSelected();
+        break;
+      case _CanvasContextAction.forward:
+        controller.moveLayer(1);
+        break;
+      case _CanvasContextAction.backward:
+        controller.moveLayer(-1);
+        break;
+      case _CanvasContextAction.delete:
+        controller.removeSelected();
+        break;
+      case null:
+        break;
+    }
   }
 
   Widget _resizeHandle(WebElement element, _ResizeHandle handle) {
@@ -465,6 +591,15 @@ class _CanvasViewState extends State<CanvasView> {
     if (value >= 350) return FontWeight.w400;
     return FontWeight.w300;
   }
+}
+
+enum _CanvasContextAction {
+  copy,
+  paste,
+  duplicate,
+  forward,
+  backward,
+  delete,
 }
 
 enum _ResizeHandle {
