@@ -218,6 +218,26 @@ class _EditorPageState extends State<EditorPage> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final keyboard = HardwareKeyboard.instance;
     final primary = keyboard.isControlPressed || keyboard.isMetaPressed;
+    final shift = keyboard.isShiftPressed;
+    final editingText =
+        FocusManager.instance.primaryFocus?.context?.widget is EditableText;
+
+    if (editingText &&
+        (event.logicalKey == LogicalKeyboardKey.delete ||
+            event.logicalKey == LogicalKeyboardKey.backspace ||
+            event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+            event.logicalKey == LogicalKeyboardKey.arrowRight ||
+            event.logicalKey == LogicalKeyboardKey.arrowUp ||
+            event.logicalKey == LogicalKeyboardKey.arrowDown ||
+            (primary &&
+                (event.logicalKey == LogicalKeyboardKey.keyZ ||
+                    event.logicalKey == LogicalKeyboardKey.keyY ||
+                    event.logicalKey == LogicalKeyboardKey.keyD ||
+                    event.logicalKey == LogicalKeyboardKey.keyC ||
+                    event.logicalKey == LogicalKeyboardKey.keyV ||
+                    event.logicalKey == LogicalKeyboardKey.keyA)))) {
+      return KeyEventResult.ignored;
+    }
 
     if (primary && event.logicalKey == LogicalKeyboardKey.keyS) {
       unawaited(_save());
@@ -241,6 +261,39 @@ class _EditorPageState extends State<EditorPage> {
     }
     if (primary && event.logicalKey == LogicalKeyboardKey.keyD) {
       _controller.duplicateSelected();
+      return KeyEventResult.handled;
+    }
+    if (primary && event.logicalKey == LogicalKeyboardKey.keyC) {
+      _controller.copySelected();
+      return KeyEventResult.handled;
+    }
+    if (primary && event.logicalKey == LogicalKeyboardKey.keyV) {
+      _controller.pasteCopied();
+      return KeyEventResult.handled;
+    }
+    if (primary && event.logicalKey == LogicalKeyboardKey.keyA) {
+      _controller.selectAll();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape && !editingText) {
+      _controller.clearSelection();
+      return KeyEventResult.handled;
+    }
+    final nudge = shift ? 10.0 : 1.0;
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _controller.nudgeSelection(-nudge, 0);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _controller.nudgeSelection(nudge, 0);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _controller.nudgeSelection(0, -nudge);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _controller.nudgeSelection(0, nudge);
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.delete ||
