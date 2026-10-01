@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../model/responsive.dart';
 import '../../model/web_element.dart';
 import '../editor_controller.dart';
 import 'color_editor_field.dart';
@@ -28,6 +29,8 @@ class InspectorPanel extends StatelessWidget {
         ),
       );
     }
+
+    final layoutElement = controller.resolvedSelectedElement ?? element;
 
     return ListView(
       padding: const EdgeInsets.all(14),
@@ -60,16 +63,22 @@ class InspectorPanel extends StatelessWidget {
             Expanded(
               child: _number(
                 'X',
-                element.x,
-                (value) => _update(element.copyWith(x: value)),
+                layoutElement.x,
+                (value) => controller.updateResolvedGeometry(
+                  element.id,
+                  x: value,
+                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _number(
                 'Y',
-                element.y,
-                (value) => _update(element.copyWith(y: value)),
+                layoutElement.y,
+                (value) => controller.updateResolvedGeometry(
+                  element.id,
+                  y: value,
+                ),
               ),
             ),
           ],
@@ -79,16 +88,22 @@ class InspectorPanel extends StatelessWidget {
             Expanded(
               child: _number(
                 'Width',
-                element.width,
-                (value) => _update(element.copyWith(width: math.max(32.0, value).toDouble())),
+                layoutElement.width,
+                (value) => controller.updateResolvedGeometry(
+                  element.id,
+                  width: math.max(32.0, value).toDouble(),
+                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _number(
                 'Height',
-                element.height,
-                (value) => _update(element.copyWith(height: math.max(24.0, value).toDouble())),
+                layoutElement.height,
+                (value) => controller.updateResolvedGeometry(
+                  element.id,
+                  height: math.max(24.0, value).toDouble(),
+                ),
               ),
             ),
           ],
@@ -105,6 +120,135 @@ class InspectorPanel extends StatelessWidget {
             element.copyWith(opacity: (value / 100).clamp(0.0, 1.0).toDouble()),
           ),
         ),
+        const Divider(height: 26),
+        _section(context, 'Responsive'),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<WebSizeMode>(
+                initialValue: layoutElement.widthMode,
+                decoration: const InputDecoration(labelText: 'Width'),
+                items: WebSizeMode.values
+                    .map(
+                      (mode) => DropdownMenuItem(
+                        value: mode,
+                        child: Text(mode.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (mode) {
+                  if (mode != null) {
+                    controller.setWidthMode(element.id, mode);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButtonFormField<WebSizeMode>(
+                initialValue: layoutElement.heightMode,
+                decoration: const InputDecoration(labelText: 'Height'),
+                items: WebSizeMode.values
+                    .map(
+                      (mode) => DropdownMenuItem(
+                        value: mode,
+                        child: Text(mode.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (mode) {
+                  if (mode != null) {
+                    controller.setHeightMode(element.id, mode);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        if (layoutElement.widthMode == WebSizeMode.percent)
+          _number(
+            'Width %',
+            layoutElement.widthPercent * 100,
+            (value) => controller.setWidthPercent(
+              element.id,
+              value / 100,
+            ),
+          ),
+        if (layoutElement.heightMode == WebSizeMode.percent)
+          _number(
+            'Height %',
+            layoutElement.heightPercent * 100,
+            (value) => controller.setHeightPercent(
+              element.id,
+              value / 100,
+            ),
+          ),
+        Row(
+          children: [
+            Expanded(
+              child: _optionalNumber(
+                'Min width',
+                layoutElement.minWidth,
+                (value) => controller.setSizeConstraints(
+                  element.id,
+                  minWidth: value,
+                  clearMinWidth: value == null,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _optionalNumber(
+                'Max width',
+                layoutElement.maxWidth,
+                (value) => controller.setSizeConstraints(
+                  element.id,
+                  maxWidth: value,
+                  clearMaxWidth: value == null,
+                ),
+              ),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: _optionalNumber(
+                'Min height',
+                layoutElement.minHeight,
+                (value) => controller.setSizeConstraints(
+                  element.id,
+                  minHeight: value,
+                  clearMinHeight: value == null,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _optionalNumber(
+                'Max height',
+                layoutElement.maxHeight,
+                (value) => controller.setSizeConstraints(
+                  element.id,
+                  maxHeight: value,
+                  clearMaxHeight: value == null,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (controller.activeBreakpoint != WebBreakpoint.desktop)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () =>
+                  controller.resetActiveBreakpointOverrides(element.id),
+              icon: const Icon(Icons.restart_alt),
+              label: Text(
+                'Reset ${controller.activeBreakpoint.label} overrides',
+              ),
+            ),
+          ),
         const Divider(height: 26),
         _section(context, 'Arrange'),
         Text(
@@ -461,7 +605,7 @@ class InspectorPanel extends StatelessWidget {
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
-                initialValue: element.anchorX,
+                initialValue: layoutElement.anchorX,
                 decoration: const InputDecoration(labelText: 'Horizontal'),
                 items: const [
                   DropdownMenuItem(value: 'left', child: Text('Left')),
@@ -469,14 +613,14 @@ class InspectorPanel extends StatelessWidget {
                   DropdownMenuItem(value: 'right', child: Text('Right')),
                 ],
                 onChanged: (value) {
-                  if (value != null) _update(element.copyWith(anchorX: value));
+                  if (value != null) controller.setAnchorX(element.id, value);
                 },
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: DropdownButtonFormField<String>(
-                initialValue: element.anchorY,
+                initialValue: layoutElement.anchorY,
                 decoration: const InputDecoration(labelText: 'Vertical'),
                 items: const [
                   DropdownMenuItem(value: 'top', child: Text('Top')),
@@ -484,7 +628,7 @@ class InspectorPanel extends StatelessWidget {
                   DropdownMenuItem(value: 'bottom', child: Text('Bottom')),
                 ],
                 onChanged: (value) {
-                  if (value != null) _update(element.copyWith(anchorY: value));
+                  if (value != null) controller.setAnchorY(element.id, value);
                 },
               ),
             ),
@@ -514,6 +658,34 @@ class InspectorPanel extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(text, style: Theme.of(context).textTheme.labelLarge),
       );
+
+  Widget _optionalNumber(
+    String label,
+    double? value,
+    ValueChanged<double?> onChanged,
+  ) {
+    return TextFormField(
+      key: ValueKey('$label-${value?.toStringAsFixed(3) ?? 'none'}'),
+      initialValue: value == null ? '' : _pretty(value),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: 'Auto',
+      ),
+      keyboardType: const TextInputType.numberWithOptions(
+        decimal: true,
+        signed: false,
+      ),
+      onFieldSubmitted: (text) {
+        final trimmed = text.trim();
+        if (trimmed.isEmpty) {
+          onChanged(null);
+          return;
+        }
+        final parsed = double.tryParse(trimmed.replaceAll(',', '.'));
+        if (parsed != null) onChanged(math.max(0, parsed).toDouble());
+      },
+    );
+  }
 
   Widget _number(
     String label,
