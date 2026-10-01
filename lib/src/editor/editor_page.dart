@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../export/html_exporter.dart';
+import '../services/font_catalog.dart';
 import '../services/project_storage.dart';
 import 'editor_controller.dart';
 import 'widgets/canvas_view.dart';
@@ -699,6 +700,14 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
     try {
       final loaded = await _storage.openProject();
       if (loaded == null) return;
+      for (final page in loaded.$1.pages) {
+        for (final element in page.elements) {
+          await FontCatalog.instance.ensureLoaded(
+            family: element.fontFamily,
+            path: element.fontPath,
+          );
+        }
+      }
       _controller.replaceProject(loaded.$1);
       if (!mounted) return;
       setState(() {
