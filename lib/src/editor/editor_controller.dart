@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
+import '../model/responsive.dart';
 
 enum SelectionAlignment {
   left,
@@ -35,6 +36,7 @@ class EditorController extends ChangeNotifier {
   List<WebElement> _clipboard = const <WebElement>[];
   int _pasteGeneration = 0;
   String? _cropElementId;
+  WebBreakpoint _activeBreakpoint = WebBreakpoint.desktop;
 
   bool gridEnabled = true;
   bool snapEnabled = false;
@@ -48,6 +50,11 @@ class EditorController extends ChangeNotifier {
   bool get canPaste => _clipboard.isNotEmpty;
   String? get cropElementId => _cropElementId;
   bool get isCropMode => _cropElementId != null;
+  WebBreakpoint get activeBreakpoint => _activeBreakpoint;
+  double get viewportWidth => _activeBreakpoint == WebBreakpoint.desktop
+      ? activePage.width
+      : _activeBreakpoint.previewWidth;
+  double get viewportHeight => activePage.height;
   bool get canUndo => _historyIndex > 0;
   bool get canRedo => _historyIndex < _history.length - 1;
 
@@ -65,18 +72,404 @@ class EditorController extends ChangeNotifier {
       .where((element) => _selectedIds.contains(element.id))
       .toList(growable: false);
 
+  WebElement? get resolvedSelectedElement {
+    final element = selectedElement;
+    return element == null ? null : resolveElement(element);
+  }
+
+  List<WebElement> get resolvedSelectedElements => selectedElements
+      .map(resolveElement)
+      .toList(growable: false);
+
   void replaceProject(WebProject project) {
     _project = project;
     _clearSelectionState();
     _cropElementId = null;
     _clipboard = const <WebElement>[];
     _pasteGeneration = 0;
+    _activeBreakpoint = WebBreakpoint.desktop;
     _nextId = _project.pages.expand((page) => page.elements).length + 1;
     _history
       ..clear()
       ..add(project);
     _historyIndex = 0;
     notifyListeners();
+  }
+
+  void setActiveBreakpoint(WebBreakpoint breakpoint) {
+    if (_activeBreakpoint == breakpoint) return;
+    _activeBreakpoint = breakpoint;
+    _cropElementId = null;
+    notifyListeners();
+  }
+
+  WebElementBreakpointOverride effectiveOverride(
+    WebElement element, [
+    WebBreakpoint? breakpoint,
+  ]) {
+    final target = breakpoint ?? _activeBreakpoint;
+    var result = const WebElementBreakpointOverride();
+    if (target == WebBreakpoint.desktop) return result;
+
+    final tablet = element.responsiveOverrides[WebBreakpoint.tablet];
+    if (tablet != null) result = result.merge(tablet);
+
+    if (target == WebBreakpoint.mobile) {
+      final mobile = element.responsiveOverrides[WebBreakpoint.mobile];
+      if (mobile != null) result = result.merge(mobile);
+    }
+    return result;
+  }
+
+  WebElement resolveElement(
+    WebElement element, {
+    WebBreakpoint? breakpoint,
+  }) {
+    final target = breakpoint ?? _activeBreakpoint;
+    final targetWidth = target == WebBreakpoint.desktop
+        ? activePage.width
+        : target.previewWidth;
+    final targetHeight = activePage.height;
+    final override = effectiveOverride(element, target);
+
+    final widthMode = override.widthMode ?? element.widthMode;
+    final heightMode = override.heightMode ?? element.heightMode;
+    final widthPercent = override.widthPercent ?? element.widthPercent;
+    final heightPercent = override.heightPercent ?? element.heightPercent;
+    final anchorX = override.anchorX ?? element.anchorX;
+    final anchorY = override.anchorY ?? element.anchorY;
+
+    final baseRight =
+        math.max(0.0, activePage.width - (element.x + element.width));
+    final baseBottom =
+        math.max(0.0, activePage.height - (element.y + element.height));
+
+    final explicitX = override.x;
+    final explicitY = override.y;
+    final rawWidth = override.width ?? element.width;
+    final rawHeight = override.height ?? element.height;
+
+    double resolvedWidth = switch (widthMode) {
+      WebSizeMode.fixed => rawWidth,
+      WebSizeMode.percent => targetWidth * widthPercent,
+      WebSizeMode.fill => math.max(
+          32.0,
+          targetWidth - (explicitX ?? element.x) - baseRight,
+        ).toDouble(),
+      WebSizeMode.hug => _hugWidth(element, targetWidth),
+    };
+
+    double resolvedHeight = switch (heightMode) {
+      WebSizeMode.fixed => rawHeight,
+      WebSizeMode.percent => targetHeight * heightPercent,
+      WebSizeMode.fill => math.max(
+          24.0,
+          targetHeight - (explicitY ?? element.y) - baseBottom,
+        ).toDouble(),
+      WebSizeMode.hug => _hugHeight(element),
+    };
+
+    final minWidth = override.minWidth ?? element.minWidth;
+    final maxWidth = override.maxWidth ?? element.maxWidth;
+    final minHeight = override.minHeight ?? element.minHeight;
+    final maxHeight = override.maxHeight ?? element.maxHeight;
+
+    if (minWidth != null) resolvedWidth = math.max(resolvedWidth, minWidth);
+    if (maxWidth != null) resolvedWidth = math.min(resolvedWidth, maxWidth);
+    if (minHeight != null) resolvedHeight = math.max(resolvedHeight, minHeight);
+    if (maxHeight != null) resolvedHeight = math.min(resolvedHeight, maxHeight);
+
+    double resolvedX;
+    if (explicitX != null) {
+      resolvedX = explicitX;
+    } else if (widthMode == WebSizeMode.fill) {
+      resolvedX = element.x;
+    } else {
+      resolvedX = switch (anchorX) {
+        'center' => targetWidth / 2 +
+            (element.x + element.width / 2 - activePage.width / 2) -
+            resolvedWidth / 2,
+        'right' => targetWidth - baseRight - resolvedWidth,
+        _ => element.x,
+      };
+    }
+
+    double resolvedY;
+    if (explicitY != null) {
+      resolvedY = explicitY;
+    } else if (heightMode == WebSizeMode.fill) {
+      resolvedY = element.y;
+    } else {
+      resolvedY = switch (anchorY) {
+        'center' => targetHeight / 2 +
+            (element.y + element.height / 2 - activePage.height / 2) -
+            resolvedHeight / 2,
+        'bottom' => targetHeight - baseBottom - resolvedHeight,
+        _ => element.y,
+      };
+    }
+
+    return element.copyWith(
+      x: resolvedX,
+      y: resolvedY,
+      width: resolvedWidth,
+      height: resolvedHeight,
+      widthMode: widthMode,
+      heightMode: heightMode,
+      widthPercent: widthPercent,
+      heightPercent: heightPercent,
+      minWidth: minWidth,
+      clearMinWidth: minWidth == null,
+      maxWidth: maxWidth,
+      clearMaxWidth: maxWidth == null,
+      minHeight: minHeight,
+      clearMinHeight: minHeight == null,
+      maxHeight: maxHeight,
+      clearMaxHeight: maxHeight == null,
+      anchorX: anchorX,
+      anchorY: anchorY,
+      visible: override.visible ?? element.visible,
+    );
+  }
+
+  double _hugWidth(WebElement element, double availableWidth) {
+    if (element.type == WebElementType.image ||
+        element.type == WebElementType.container ||
+        element.type == WebElementType.section ||
+        element.type == WebElementType.card) {
+      return math.min(element.width, availableWidth);
+    }
+    final textWidth =
+        element.text.runes.length * element.fontSize * .58 +
+        math.max(20.0, element.letterSpacing * element.text.length) +
+        24;
+    return textWidth.clamp(32.0, availableWidth).toDouble();
+  }
+
+  double _hugHeight(WebElement element) {
+    if (element.type == WebElementType.image ||
+        element.type == WebElementType.container ||
+        element.type == WebElementType.section ||
+        element.type == WebElementType.card) {
+      return element.height;
+    }
+    final lines = math.max(1, '\n'.allMatches(element.text).length + 1);
+    return math.max(
+      24.0,
+      lines * element.fontSize * element.lineHeight + 20,
+    ).toDouble();
+  }
+
+  void resetActiveBreakpointOverrides(String id) {
+    if (_activeBreakpoint == WebBreakpoint.desktop) return;
+    final element = _elementById(id);
+    if (element == null) return;
+    final map = Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+      element.responsiveOverrides,
+    )..remove(_activeBreakpoint);
+    updateElement(element.copyWith(responsiveOverrides: map));
+  }
+
+  void setWidthMode(String id, WebSizeMode mode) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    final resolved = resolveElement(raw);
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(
+        raw.copyWith(
+          widthMode: mode,
+          widthPercent: mode == WebSizeMode.percent
+              ? resolved.width / math.max(1.0, viewportWidth)
+              : raw.widthPercent,
+        ),
+      );
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(
+        widthMode: mode,
+        widthPercent: mode == WebSizeMode.percent
+            ? resolved.width / math.max(1.0, viewportWidth)
+            : null,
+      ),
+    );
+  }
+
+  void setHeightMode(String id, WebSizeMode mode) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    final resolved = resolveElement(raw);
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(
+        raw.copyWith(
+          heightMode: mode,
+          heightPercent: mode == WebSizeMode.percent
+              ? resolved.height / math.max(1.0, viewportHeight)
+              : raw.heightPercent,
+        ),
+      );
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(
+        heightMode: mode,
+        heightPercent: mode == WebSizeMode.percent
+            ? resolved.height / math.max(1.0, viewportHeight)
+            : null,
+      ),
+    );
+  }
+
+  void setWidthPercent(String id, double value) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    final percent = value.clamp(.01, 2.0).toDouble();
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(raw.copyWith(widthPercent: percent));
+    } else {
+      _updateBreakpointOverride(
+        raw,
+        (override) => override.copyWith(widthPercent: percent),
+      );
+    }
+  }
+
+  void setHeightPercent(String id, double value) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    final percent = value.clamp(.01, 2.0).toDouble();
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(raw.copyWith(heightPercent: percent));
+    } else {
+      _updateBreakpointOverride(
+        raw,
+        (override) => override.copyWith(heightPercent: percent),
+      );
+    }
+  }
+
+  void setSizeConstraints(
+    String id, {
+    double? minWidth,
+    bool clearMinWidth = false,
+    double? maxWidth,
+    bool clearMaxWidth = false,
+    double? minHeight,
+    bool clearMinHeight = false,
+    double? maxHeight,
+    bool clearMaxHeight = false,
+  }) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(
+        raw.copyWith(
+          minWidth: minWidth,
+          clearMinWidth: clearMinWidth,
+          maxWidth: maxWidth,
+          clearMaxWidth: clearMaxWidth,
+          minHeight: minHeight,
+          clearMinHeight: clearMinHeight,
+          maxHeight: maxHeight,
+          clearMaxHeight: clearMaxHeight,
+        ),
+      );
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(
+        minWidth: minWidth,
+        clearMinWidth: clearMinWidth,
+        maxWidth: maxWidth,
+        clearMaxWidth: clearMaxWidth,
+        minHeight: minHeight,
+        clearMinHeight: clearMinHeight,
+        maxHeight: maxHeight,
+        clearMaxHeight: clearMaxHeight,
+      ),
+    );
+  }
+
+  void updateResolvedGeometry(
+    String id, {
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    bool commit = true,
+  }) {
+    final raw = _elementById(id);
+    if (raw == null || raw.locked) return;
+    final resolved = resolveElement(raw);
+    _writeResolvedGeometry(
+      raw,
+      x: x ?? resolved.x,
+      y: y ?? resolved.y,
+      width: width ?? resolved.width,
+      height: height ?? resolved.height,
+      commit: commit,
+    );
+  }
+
+  void _writeResolvedGeometry(
+    WebElement raw, {
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+    required bool commit,
+  }) {
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(
+        raw.copyWith(
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        ),
+        commit: commit,
+      );
+      return;
+    }
+
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+      ),
+      commit: commit,
+    );
+  }
+
+  void _updateBreakpointOverride(
+    WebElement raw,
+    WebElementBreakpointOverride Function(
+      WebElementBreakpointOverride override,
+    ) update, {
+    bool commit = true,
+  }) {
+    if (_activeBreakpoint == WebBreakpoint.desktop) return;
+    final map = Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+      raw.responsiveOverrides,
+    );
+    final current =
+        map[_activeBreakpoint] ?? const WebElementBreakpointOverride();
+    final next = update(current);
+    if (next.isEmpty) {
+      map.remove(_activeBreakpoint);
+    } else {
+      map[_activeBreakpoint] = next;
+    }
+    updateElement(
+      raw.copyWith(responsiveOverrides: map),
+      commit: commit,
+    );
   }
 
   void select(String? id) => selectOnly(id);
