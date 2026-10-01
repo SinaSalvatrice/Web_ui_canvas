@@ -27,14 +27,12 @@ class ProjectStorage {
     String? existingPath,
   }) async {
     var path = existingPath;
-    if (path == null) {
-      path = await FilePicker.platform.saveFile(
+    path ??= await FilePicker.platform.saveFile(
         dialogTitle: 'Save Web UI Canvas project',
         fileName: 'website.webui',
         type: FileType.custom,
         allowedExtensions: const ['webui'],
       );
-    }
     if (path == null) return null;
     if (!path.toLowerCase().endsWith('.webui')) {
       path = '$path.webui';
