@@ -97,7 +97,8 @@ echo.
 echo ZIP:
 echo   %CD%\dist\Web_UI_Canvas.zip
 echo.
-explorer "%CD%\dist"
+echo App wird gestartet...
+start "" "%CD%\dist\Web_UI_Canvas\web_ui_canvas.exe"
 goto :end
 
 :fail
