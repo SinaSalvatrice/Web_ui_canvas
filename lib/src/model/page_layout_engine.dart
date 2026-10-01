@@ -424,7 +424,7 @@ class PageLayoutEngine {
     double width,
     double height,
   ) {
-    final columns = parent.gridColumns.clamp(1, 12);
+    final columns = parent.gridColumns.clamp(1, 12).toInt();
     final cellWidth = math.max(
       0.0,
       (width - parent.gap * (columns - 1)) / columns,
