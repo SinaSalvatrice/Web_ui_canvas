@@ -1,3 +1,4 @@
+import 'layout.dart';
 import 'responsive.dart';
 
 enum WebElementType {
@@ -115,6 +116,20 @@ class WebElement {
     this.minHeight,
     this.maxHeight,
     this.responsiveOverrides = const {},
+    this.parentId,
+    this.layoutMode = WebLayoutMode.free,
+    this.gap = 16,
+    this.paddingTop = 0,
+    this.paddingRight = 0,
+    this.paddingBottom = 0,
+    this.paddingLeft = 0,
+    this.marginTop = 0,
+    this.marginRight = 0,
+    this.marginBottom = 0,
+    this.marginLeft = 0,
+    this.gridColumns = 2,
+    this.mainAlignment = WebMainAlignment.start,
+    this.crossAlignment = WebCrossAlignment.start,
   });
 
   final String id;
@@ -157,6 +172,26 @@ class WebElement {
   final double? minHeight;
   final double? maxHeight;
   final Map<WebBreakpoint, WebElementBreakpointOverride> responsiveOverrides;
+  final String? parentId;
+  final WebLayoutMode layoutMode;
+  final double gap;
+  final double paddingTop;
+  final double paddingRight;
+  final double paddingBottom;
+  final double paddingLeft;
+  final double marginTop;
+  final double marginRight;
+  final double marginBottom;
+  final double marginLeft;
+  final int gridColumns;
+  final WebMainAlignment mainAlignment;
+  final WebCrossAlignment crossAlignment;
+
+  bool get canContainChildren =>
+      type == WebElementType.container ||
+      type == WebElementType.section ||
+      type == WebElementType.card ||
+      type == WebElementType.navigation;
 
   factory WebElement.fresh({
     required String id,
@@ -244,6 +279,21 @@ class WebElement {
     double? maxHeight,
     bool clearMaxHeight = false,
     Map<WebBreakpoint, WebElementBreakpointOverride>? responsiveOverrides,
+    String? parentId,
+    bool clearParentId = false,
+    WebLayoutMode? layoutMode,
+    double? gap,
+    double? paddingTop,
+    double? paddingRight,
+    double? paddingBottom,
+    double? paddingLeft,
+    double? marginTop,
+    double? marginRight,
+    double? marginBottom,
+    double? marginLeft,
+    int? gridColumns,
+    WebMainAlignment? mainAlignment,
+    WebCrossAlignment? crossAlignment,
   }) {
     return WebElement(
       id: id,
@@ -287,6 +337,20 @@ class WebElement {
       minHeight: clearMinHeight ? null : (minHeight ?? this.minHeight),
       maxHeight: clearMaxHeight ? null : (maxHeight ?? this.maxHeight),
       responsiveOverrides: responsiveOverrides ?? this.responsiveOverrides,
+      parentId: clearParentId ? null : (parentId ?? this.parentId),
+      layoutMode: layoutMode ?? this.layoutMode,
+      gap: gap ?? this.gap,
+      paddingTop: paddingTop ?? this.paddingTop,
+      paddingRight: paddingRight ?? this.paddingRight,
+      paddingBottom: paddingBottom ?? this.paddingBottom,
+      paddingLeft: paddingLeft ?? this.paddingLeft,
+      marginTop: marginTop ?? this.marginTop,
+      marginRight: marginRight ?? this.marginRight,
+      marginBottom: marginBottom ?? this.marginBottom,
+      marginLeft: marginLeft ?? this.marginLeft,
+      gridColumns: gridColumns ?? this.gridColumns,
+      mainAlignment: mainAlignment ?? this.mainAlignment,
+      crossAlignment: crossAlignment ?? this.crossAlignment,
     );
   }
 
@@ -335,6 +399,20 @@ class WebElement {
             for (final entry in responsiveOverrides.entries)
               entry.key.name: entry.value.toJson(),
           },
+        'parentId': parentId,
+        'layoutMode': layoutMode.name,
+        'gap': gap,
+        'paddingTop': paddingTop,
+        'paddingRight': paddingRight,
+        'paddingBottom': paddingBottom,
+        'paddingLeft': paddingLeft,
+        'marginTop': marginTop,
+        'marginRight': marginRight,
+        'marginBottom': marginBottom,
+        'marginLeft': marginLeft,
+        'gridColumns': gridColumns,
+        'mainAlignment': mainAlignment.name,
+        'crossAlignment': crossAlignment.name,
       };
 
   factory WebElement.fromJson(Map<String, Object?> json) => WebElement(
@@ -391,5 +469,25 @@ class WebElement {
               Map<String, Object?>.from(entry.value as Map),
             ),
         },
+        parentId: json['parentId'] as String?,
+        layoutMode: WebLayoutMode.values.byName(
+          json['layoutMode'] as String? ?? WebLayoutMode.free.name,
+        ),
+        gap: (json['gap'] as num?)?.toDouble() ?? 16,
+        paddingTop: (json['paddingTop'] as num?)?.toDouble() ?? 0,
+        paddingRight: (json['paddingRight'] as num?)?.toDouble() ?? 0,
+        paddingBottom: (json['paddingBottom'] as num?)?.toDouble() ?? 0,
+        paddingLeft: (json['paddingLeft'] as num?)?.toDouble() ?? 0,
+        marginTop: (json['marginTop'] as num?)?.toDouble() ?? 0,
+        marginRight: (json['marginRight'] as num?)?.toDouble() ?? 0,
+        marginBottom: (json['marginBottom'] as num?)?.toDouble() ?? 0,
+        marginLeft: (json['marginLeft'] as num?)?.toDouble() ?? 0,
+        gridColumns: (json['gridColumns'] as num?)?.toInt() ?? 2,
+        mainAlignment: WebMainAlignment.values.byName(
+          json['mainAlignment'] as String? ?? WebMainAlignment.start.name,
+        ),
+        crossAlignment: WebCrossAlignment.values.byName(
+          json['crossAlignment'] as String? ?? WebCrossAlignment.start.name,
+        ),
       );
 }

@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../model/layout.dart';
 import '../../model/responsive.dart';
 import '../../model/web_element.dart';
 import '../editor_controller.dart';
@@ -68,6 +69,7 @@ class InspectorPanel extends StatelessWidget {
                   element.id,
                   x: value,
                 ),
+                enabled: !controller.isAutoLayoutManaged(element.id),
               ),
             ),
             const SizedBox(width: 8),
@@ -79,6 +81,7 @@ class InspectorPanel extends StatelessWidget {
                   element.id,
                   y: value,
                 ),
+                enabled: !controller.isAutoLayoutManaged(element.id),
               ),
             ),
           ],
@@ -120,6 +123,242 @@ class InspectorPanel extends StatelessWidget {
             element.copyWith(opacity: (value / 100).clamp(0.0, 1.0).toDouble()),
           ),
         ),
+        const Divider(height: 26),
+        _section(context, 'Hierarchy'),
+        DropdownButtonFormField<String>(
+          initialValue: element.parentId ?? '__page__',
+          decoration: const InputDecoration(labelText: 'Parent'),
+          items: [
+            const DropdownMenuItem(
+              value: '__page__',
+              child: Text('Page'),
+            ),
+            ...controller.parentCandidatesFor(element.id).map(
+                  (candidate) => DropdownMenuItem(
+                    value: candidate.id,
+                    child: Text(
+                      '${candidate.type.label} · ${candidate.id}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            controller.setParent(
+              element.id,
+              value == '__page__' ? null : value,
+            );
+          },
+        ),
+        if (element.parentId != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            controller.isAutoLayoutManaged(element.id)
+                ? 'Position is managed by the parent layout.'
+                : 'Position is relative to the parent container.',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _number(
+                  'Margin T',
+                  element.marginTop,
+                  (value) => controller.updateMargins(
+                    element.id,
+                    top: math.max(0, value).toDouble(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _number(
+                  'Margin R',
+                  element.marginRight,
+                  (value) => controller.updateMargins(
+                    element.id,
+                    right: math.max(0, value).toDouble(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _number(
+                  'Margin B',
+                  element.marginBottom,
+                  (value) => controller.updateMargins(
+                    element.id,
+                    bottom: math.max(0, value).toDouble(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _number(
+                  'Margin L',
+                  element.marginLeft,
+                  (value) => controller.updateMargins(
+                    element.id,
+                    left: math.max(0, value).toDouble(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (element.canContainChildren) ...[
+          const Divider(height: 26),
+          _section(context, 'Container layout'),
+          DropdownButtonFormField<WebLayoutMode>(
+            initialValue: element.layoutMode,
+            decoration: const InputDecoration(labelText: 'Layout'),
+            items: WebLayoutMode.values
+                .map(
+                  (mode) => DropdownMenuItem(
+                    value: mode,
+                    child: Text(mode.label),
+                  ),
+                )
+                .toList(),
+            onChanged: (mode) {
+              if (mode != null) {
+                controller.setLayoutMode(element.id, mode);
+              }
+            },
+          ),
+          if (element.layoutMode != WebLayoutMode.free) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _number(
+                    'Gap',
+                    element.gap,
+                    (value) => controller.updateContainerLayout(
+                      element.id,
+                      gap: math.max(0, value).toDouble(),
+                    ),
+                  ),
+                ),
+                if (element.layoutMode == WebLayoutMode.grid) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _number(
+                      'Columns',
+                      element.gridColumns.toDouble(),
+                      (value) => controller.updateContainerLayout(
+                        element.id,
+                        gridColumns: value.round().clamp(1, 12).toInt(),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<WebMainAlignment>(
+                    initialValue: element.mainAlignment,
+                    decoration: const InputDecoration(labelText: 'Main'),
+                    items: WebMainAlignment.values
+                        .map(
+                          (alignment) => DropdownMenuItem(
+                            value: alignment,
+                            child: Text(alignment.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (alignment) {
+                      if (alignment != null) {
+                        controller.updateContainerLayout(
+                          element.id,
+                          mainAlignment: alignment,
+                        );
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<WebCrossAlignment>(
+                    initialValue: element.crossAlignment,
+                    decoration: const InputDecoration(labelText: 'Cross'),
+                    items: WebCrossAlignment.values
+                        .map(
+                          (alignment) => DropdownMenuItem(
+                            value: alignment,
+                            child: Text(alignment.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (alignment) {
+                      if (alignment != null) {
+                        controller.updateContainerLayout(
+                          element.id,
+                          crossAlignment: alignment,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: _number(
+                  'Padding T',
+                  element.paddingTop,
+                  (value) => controller.updateContainerLayout(
+                    element.id,
+                    paddingTop: math.max(0, value).toDouble(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _number(
+                  'Padding R',
+                  element.paddingRight,
+                  (value) => controller.updateContainerLayout(
+                    element.id,
+                    paddingRight: math.max(0, value).toDouble(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _number(
+                  'Padding B',
+                  element.paddingBottom,
+                  (value) => controller.updateContainerLayout(
+                    element.id,
+                    paddingBottom: math.max(0, value).toDouble(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _number(
+                  'Padding L',
+                  element.paddingLeft,
+                  (value) => controller.updateContainerLayout(
+                    element.id,
+                    paddingLeft: math.max(0, value).toDouble(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
         const Divider(height: 26),
         _section(context, 'Responsive'),
         Row(
@@ -690,11 +929,12 @@ class InspectorPanel extends StatelessWidget {
   Widget _number(
     String label,
     double value,
-    ValueChanged<double> onChanged,
-  ) {
+    ValueChanged<double> onChanged, {
+    bool enabled = true,
+  }) {
     return Listener(
       onPointerSignal: (event) {
-        if (event is! PointerScrollEvent) return;
+        if (!enabled || event is! PointerScrollEvent) return;
         GestureBinding.instance.pointerSignalResolver.register(
           event,
           (resolved) {
@@ -708,6 +948,7 @@ class InspectorPanel extends StatelessWidget {
         );
       },
       child: TextFormField(
+        enabled: enabled,
         key: ValueKey('$label-${value.toStringAsFixed(3)}'),
         initialValue: _pretty(value),
         decoration: InputDecoration(labelText: label),

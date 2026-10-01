@@ -101,8 +101,7 @@ class _CanvasViewState extends State<CanvasView> {
     final page = controller.activePage;
     final pageWidth = controller.viewportWidth;
     final pageHeight = controller.viewportHeight;
-    final resolvedElements = page.elements
-        .map(controller.resolveElement)
+    final resolvedElements = controller.resolvedPageElements
         .where((element) => element.visible)
         .toList(growable: false);
     final touchMode = MediaQuery.sizeOf(context).shortestSide < 700;

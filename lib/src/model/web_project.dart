@@ -9,7 +9,7 @@ class WebProject {
     required this.pages,
   });
 
-  static const currentSchemaVersion = 2;
+  static const currentSchemaVersion = 3;
 
   final int schemaVersion;
   final String id;

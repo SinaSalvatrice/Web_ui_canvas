@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:web_ui_canvas/src/model/layout.dart';
 import 'package:web_ui_canvas/src/model/responsive.dart';
 import 'package:web_ui_canvas/src/model/web_element.dart';
 import 'package:web_ui_canvas/src/model/web_page.dart';
@@ -80,6 +81,68 @@ void main() {
           .widthMode,
       WebSizeMode.fill,
     );
+  });
+
+  test('container layout fields survive json roundtrip', () {
+    const parent = WebElement(
+      id: 'layout',
+      type: WebElementType.container,
+      x: 100,
+      y: 120,
+      width: 800,
+      height: 500,
+      layoutMode: WebLayoutMode.grid,
+      gap: 24,
+      paddingTop: 12,
+      paddingRight: 18,
+      paddingBottom: 20,
+      paddingLeft: 16,
+      gridColumns: 3,
+      mainAlignment: WebMainAlignment.spaceBetween,
+      crossAlignment: WebCrossAlignment.stretch,
+    );
+    const child = WebElement(
+      id: 'child',
+      type: WebElementType.text,
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 80,
+      parentId: 'layout',
+      marginTop: 4,
+      marginRight: 5,
+      marginBottom: 6,
+      marginLeft: 7,
+    );
+    const page = WebPage(
+      id: 'layout-page',
+      name: 'Layout',
+      width: 1440,
+      height: 1200,
+      backgroundColor: 0xffffffff,
+      elements: [parent, child],
+    );
+    const project = WebProject(
+      schemaVersion: WebProject.currentSchemaVersion,
+      id: 'layout-project',
+      name: 'Layout project',
+      activePageId: 'layout-page',
+      pages: [page],
+    );
+
+    final restored = WebProject.fromJson(project.toJson());
+    final restoredParent = restored.pages.single.elements.first;
+    final restoredChild = restored.pages.single.elements.last;
+
+    expect(restoredParent.layoutMode, WebLayoutMode.grid);
+    expect(restoredParent.gridColumns, 3);
+    expect(restoredParent.gap, 24);
+    expect(restoredParent.paddingLeft, 16);
+    expect(restoredParent.mainAlignment, WebMainAlignment.spaceBetween);
+    expect(restoredParent.crossAlignment, WebCrossAlignment.stretch);
+    expect(restoredChild.parentId, 'layout');
+    expect(restoredChild.marginLeft, 7);
+    expect(restoredChild.marginBottom, 6);
   });
 
   test('schema v1 projects migrate to current schema', () {

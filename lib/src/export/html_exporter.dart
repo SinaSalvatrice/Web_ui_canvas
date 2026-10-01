@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
+import '../model/layout.dart';
+import '../model/page_layout_engine.dart';
 import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
@@ -85,8 +87,20 @@ class HtmlExporter {
     WebPage page,
     Map<String, String> assets,
   ) {
-    final body = page.elements
-        .map((element) => _elementHtml(element, assets))
+    final ids = page.elements.map((element) => element.id).toSet();
+    final roots = page.elements.where(
+      (element) =>
+          element.parentId == null || !ids.contains(element.parentId),
+    );
+    final body = roots
+        .map(
+          (element) => _elementHtmlTree(
+            element,
+            page,
+            assets,
+            <String>{},
+          ),
+        )
         .join('\n');
 
     return '''<!doctype html>
@@ -106,26 +120,75 @@ $body
 ''';
   }
 
-  String _elementHtml(WebElement element, Map<String, String> assets) {
+  String _elementHtmlTree(
+    WebElement element,
+    WebPage page,
+    Map<String, String> assets,
+    Set<String> visiting,
+  ) {
+    if (!visiting.add(element.id)) return '';
+
+    final children = page.elements
+        .where((candidate) => candidate.parentId == element.id)
+        .map(
+          (child) => _elementHtmlTree(
+            child,
+            page,
+            assets,
+            visiting,
+          ),
+        )
+        .where((html) => html.isNotEmpty)
+        .join('\n');
+
+    visiting.remove(element.id);
+    return _elementHtml(element, assets, children);
+  }
+
+  String _elementHtml(
+    WebElement element,
+    Map<String, String> assets,
+    String children,
+  ) {
     final id = _escapeAttribute(element.id);
     final text = _escape(element.text);
+    final hasChildren = children.isNotEmpty;
+    final content = hasChildren ? children : text;
+
     return switch (element.type) {
       WebElementType.image =>
         '<div id="$id" class="webui-element webui-image-frame"><img class="webui-image-content" src="${_escapeAttribute(assets[element.imagePath] ?? '')}" alt=""></div>',
       WebElementType.button => element.href.trim().isNotEmpty
-          ? '<a id="$id" class="webui-element" href="${_escapeAttribute(element.href)}">$text</a>'
-          : '<button id="$id" class="webui-element" type="button">$text</button>',
+          ? '<a id="$id" class="webui-element" href="${_escapeAttribute(element.href)}">$content</a>'
+          : '<button id="$id" class="webui-element" type="button">$content</button>',
       WebElementType.input =>
         '<input id="$id" class="webui-element" placeholder="${_escapeAttribute(element.text)}">',
       WebElementType.navigation =>
-        '<nav id="$id" class="webui-element">$text</nav>',
+        '<nav id="$id" class="webui-element">$content</nav>',
       WebElementType.section =>
-        '<section id="$id" class="webui-element">$text</section>',
+        '<section id="$id" class="webui-element">$content</section>',
       WebElementType.divider =>
         '<div id="$id" class="webui-element" aria-hidden="true"></div>',
-      _ => '<div id="$id" class="webui-element">$text</div>',
+      _ => '<div id="$id" class="webui-element">$content</div>',
     };
   }
+
+  String buildHtmlForPage(
+    WebPage page, {
+    Map<String, String> assets = const {},
+    String title = 'Test',
+  }) =>
+      _html(
+        WebProject(
+          schemaVersion: WebProject.currentSchemaVersion,
+          id: 'test',
+          name: title,
+          activePageId: page.id,
+          pages: [page],
+        ),
+        page,
+        assets,
+      );
 
   String buildCssForPage(
     WebPage page, {
@@ -165,12 +228,19 @@ $body
       ..writeln('}')
       ..writeln('.webui-element { box-sizing: border-box; position: absolute; }');
 
+    final rawById = {
+      for (final element in page.elements) element.id: element,
+    };
+
+    final desktopLayout = _layoutMap(page, WebBreakpoint.desktop);
     for (final element in page.elements) {
       _writeElementRule(
         buffer,
         page,
         element,
         WebBreakpoint.desktop,
+        rawById,
+        desktopLayout,
       );
       if (element.type == WebElementType.image) {
         buffer
@@ -194,6 +264,7 @@ $body
       WebBreakpoint.tablet,
       WebBreakpoint.mobile,
     ]) {
+      final layout = _layoutMap(page, breakpoint);
       buffer
         ..writeln()
         ..writeln(
@@ -205,27 +276,42 @@ $body
           page,
           element,
           breakpoint,
+          rawById,
+          layout,
           indent: '  ',
         );
       }
       buffer.writeln('}');
     }
-
     return buffer.toString();
   }
+
+  Map<String, WebElement> _layoutMap(
+    WebPage page,
+    WebBreakpoint breakpoint,
+  ) => {
+        for (final element in PageLayoutEngine.resolvePage(page, breakpoint))
+          element.id: element,
+      };
 
   void _writeElementRule(
     StringBuffer buffer,
     WebPage page,
     WebElement element,
-    WebBreakpoint breakpoint, {
+    WebBreakpoint breakpoint,
+    Map<String, WebElement> rawById,
+    Map<String, WebElement> layout, {
     String indent = '',
   }) {
-    final resolved = ResponsiveLayoutResolver.resolve(
-      element,
-      page,
-      breakpoint,
-    );
+    final resolved = layout[element.id] ??
+        ResponsiveLayoutResolver.resolve(element, page, breakpoint);
+    final parent = element.parentId == null ? null : rawById[element.parentId];
+    final parentResolved =
+        element.parentId == null ? null : layout[element.parentId];
+    final autoManaged =
+        parent != null && parent.layoutMode != WebLayoutMode.free;
+    final nestedFree =
+        parent != null && parent.layoutMode == WebLayoutMode.free;
     final targetWidth = breakpoint == WebBreakpoint.desktop
         ? page.width
         : breakpoint.previewWidth;
@@ -233,40 +319,50 @@ $body
 
     buffer.writeln('$indent#${element.id} {');
 
-    final horizontal = _horizontalPositionDeclarations(
-      resolved,
-      targetWidth,
-    );
-    for (final declaration in horizontal) {
-      buffer.writeln('$indent  $declaration');
+    if (autoManaged) {
+      buffer
+        ..writeln('$indent  position: relative;')
+        ..writeln('$indent  left: auto;')
+        ..writeln('$indent  right: auto;')
+        ..writeln('$indent  top: auto;')
+        ..writeln('$indent  bottom: auto;')
+        ..writeln(
+          '$indent  margin: ${element.marginTop}px ${element.marginRight}px ${element.marginBottom}px ${element.marginLeft}px;',
+        );
+    } else if (nestedFree && parentResolved != null) {
+      final localX = resolved.x - parentResolved.x - parent!.paddingLeft;
+      final localY = resolved.y - parentResolved.y - parent.paddingTop;
+      buffer
+        ..writeln('$indent  position: absolute;')
+        ..writeln('$indent  left: ${localX}px;')
+        ..writeln('$indent  top: ${localY}px;')
+        ..writeln('$indent  right: auto;')
+        ..writeln('$indent  bottom: auto;');
+    } else {
+      for (final declaration in
+          _horizontalPositionDeclarations(resolved, targetWidth)) {
+        buffer.writeln('$indent  $declaration');
+      }
+      for (final declaration in
+          _verticalPositionDeclarations(resolved, targetHeight)) {
+        buffer.writeln('$indent  $declaration');
+      }
     }
-
-    final vertical = _verticalPositionDeclarations(
-      resolved,
-      targetHeight,
-    );
-    for (final declaration in vertical) {
-      buffer.writeln('$indent  $declaration');
-    }
-
-    final width = switch (resolved.widthMode) {
-      WebSizeMode.percent =>
-        '${(resolved.widthPercent * 100).toStringAsFixed(4)}%',
-      WebSizeMode.hug => 'max-content',
-      WebSizeMode.fill => 'auto',
-      WebSizeMode.fixed => '${resolved.width}px',
-    };
-    final height = switch (resolved.heightMode) {
-      WebSizeMode.percent =>
-        '${(resolved.heightPercent * 100).toStringAsFixed(4)}%',
-      WebSizeMode.hug => 'max-content',
-      WebSizeMode.fill => 'auto',
-      WebSizeMode.fixed => '${resolved.height}px',
-    };
 
     buffer
-      ..writeln('$indent  width: $width;')
-      ..writeln('$indent  height: $height;');
+      ..writeln('$indent  width: ${_widthCss(resolved, parent, autoManaged)};')
+      ..writeln('$indent  height: ${_heightCss(resolved, parent, autoManaged)};');
+
+    if (autoManaged &&
+        parent?.layoutMode == WebLayoutMode.row &&
+        resolved.widthMode == WebSizeMode.fill) {
+      buffer.writeln('$indent  flex: 1 1 0;');
+    }
+    if (autoManaged &&
+        parent?.layoutMode == WebLayoutMode.column &&
+        resolved.heightMode == WebSizeMode.fill) {
+      buffer.writeln('$indent  flex: 1 1 0;');
+    }
 
     if (resolved.minWidth != null) {
       buffer.writeln('$indent  min-width: ${resolved.minWidth}px;');
@@ -290,13 +386,15 @@ $body
     }
 
     final transforms = <String>[];
-    if (resolved.widthMode != WebSizeMode.fill &&
-        resolved.anchorX == 'center') {
-      transforms.add('translateX(-50%)');
-    }
-    if (resolved.heightMode != WebSizeMode.fill &&
-        resolved.anchorY == 'center') {
-      transforms.add('translateY(-50%)');
+    if (!autoManaged && !nestedFree) {
+      if (resolved.widthMode != WebSizeMode.fill &&
+          resolved.anchorX == 'center') {
+        transforms.add('translateX(-50%)');
+      }
+      if (resolved.heightMode != WebSizeMode.fill &&
+          resolved.anchorY == 'center') {
+        transforms.add('translateY(-50%)');
+      }
     }
     transforms.add('rotate(${resolved.rotation}rad)');
 
@@ -325,27 +423,126 @@ $body
       ..writeln(
         '$indent  border: ${resolved.borderWidth}px solid ${resolved.borderColor == null ? 'transparent' : _color(resolved.borderColor!)};',
       );
+
+    _writeContainerLayout(buffer, element, indent);
+
     if (resolved.type == WebElementType.image) {
       buffer.writeln('$indent  overflow: hidden;');
     }
     buffer.writeln('$indent}');
   }
 
+  String _widthCss(
+    WebElement element,
+    WebElement? parent,
+    bool autoManaged,
+  ) {
+    if (autoManaged && element.widthMode == WebSizeMode.fill) {
+      if (parent?.layoutMode == WebLayoutMode.row) return 'auto';
+      return '100%';
+    }
+    return switch (element.widthMode) {
+      WebSizeMode.percent =>
+        '${(element.widthPercent * 100).toStringAsFixed(4)}%',
+      WebSizeMode.hug => 'max-content',
+      WebSizeMode.fill => 'auto',
+      WebSizeMode.fixed => '${element.width}px',
+    };
+  }
+
+  String _heightCss(
+    WebElement element,
+    WebElement? parent,
+    bool autoManaged,
+  ) {
+    if (autoManaged && element.heightMode == WebSizeMode.fill) {
+      if (parent?.layoutMode == WebLayoutMode.column) return 'auto';
+      return '100%';
+    }
+    return switch (element.heightMode) {
+      WebSizeMode.percent =>
+        '${(element.heightPercent * 100).toStringAsFixed(4)}%',
+      WebSizeMode.hug => 'max-content',
+      WebSizeMode.fill => 'auto',
+      WebSizeMode.fixed => '${element.height}px',
+    };
+  }
+
+  void _writeContainerLayout(
+    StringBuffer buffer,
+    WebElement element,
+    String indent,
+  ) {
+    if (!element.canContainChildren) return;
+    buffer.writeln(
+      '$indent  padding: ${element.paddingTop}px ${element.paddingRight}px ${element.paddingBottom}px ${element.paddingLeft}px;',
+    );
+
+    switch (element.layoutMode) {
+      case WebLayoutMode.free:
+        return;
+      case WebLayoutMode.row:
+        buffer
+          ..writeln('$indent  display: flex;')
+          ..writeln('$indent  flex-direction: row;')
+          ..writeln('$indent  flex-wrap: nowrap;');
+        break;
+      case WebLayoutMode.column:
+        buffer
+          ..writeln('$indent  display: flex;')
+          ..writeln('$indent  flex-direction: column;')
+          ..writeln('$indent  flex-wrap: nowrap;');
+        break;
+      case WebLayoutMode.flow:
+        buffer
+          ..writeln('$indent  display: flex;')
+          ..writeln('$indent  flex-direction: row;')
+          ..writeln('$indent  flex-wrap: wrap;');
+        break;
+      case WebLayoutMode.grid:
+        buffer
+          ..writeln('$indent  display: grid;')
+          ..writeln(
+            '$indent  grid-template-columns: repeat(${element.gridColumns.clamp(1, 12)}, minmax(0, 1fr));',
+          );
+        break;
+    }
+
+    buffer
+      ..writeln('$indent  gap: ${element.gap}px;')
+      ..writeln(
+        '$indent  justify-content: ${_mainAlignmentCss(element.mainAlignment)};',
+      )
+      ..writeln(
+        '$indent  align-items: ${_crossAlignmentCss(element.crossAlignment)};',
+      );
+  }
+
+  String _mainAlignmentCss(WebMainAlignment value) => switch (value) {
+        WebMainAlignment.center => 'center',
+        WebMainAlignment.end => 'flex-end',
+        WebMainAlignment.spaceBetween => 'space-between',
+        WebMainAlignment.start => 'flex-start',
+      };
+
+  String _crossAlignmentCss(WebCrossAlignment value) => switch (value) {
+        WebCrossAlignment.center => 'center',
+        WebCrossAlignment.end => 'flex-end',
+        WebCrossAlignment.stretch => 'stretch',
+        WebCrossAlignment.start => 'flex-start',
+      };
+
   List<String> _horizontalPositionDeclarations(
     WebElement element,
     double targetWidth,
   ) {
     if (element.widthMode == WebSizeMode.fill) {
-      final right = math.max(
-        0.0,
-        targetWidth - (element.x + element.width),
-      );
+      final right = math.max(0.0, targetWidth - (element.x + element.width));
       return [
         'left: ${element.x}px;',
-        'right: $right px;'.replaceAll(' ', ''),
+        'right: ${right}px;',
       ];
     }
-
     return switch (element.anchorX) {
       'center' => [
           'left: calc(50% + ${element.x + element.width / 2 - targetWidth / 2}px);',
@@ -367,16 +564,12 @@ $body
     double targetHeight,
   ) {
     if (element.heightMode == WebSizeMode.fill) {
-      final bottom = math.max(
-        0.0,
-        targetHeight - (element.y + element.height),
-      );
+      final bottom = math.max(0.0, targetHeight - (element.y + element.height));
       return [
         'top: ${element.y}px;',
-        'bottom: $bottom px;'.replaceAll(' ', ''),
+        'bottom: ${bottom}px;',
       ];
     }
-
     return switch (element.anchorY) {
       'center' => [
           'top: calc(50% + ${element.y + element.height / 2 - targetHeight / 2}px);',
@@ -392,7 +585,6 @@ $body
         ],
     };
   }
-
   String _color(int argb) {
     final a = ((argb >> 24) & 0xff) / 255;
     final r = (argb >> 16) & 0xff;
