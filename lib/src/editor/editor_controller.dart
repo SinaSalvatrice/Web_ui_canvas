@@ -7,6 +7,7 @@ import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
 import '../model/responsive.dart';
+import '../model/responsive_layout.dart';
 
 enum SelectionAlignment {
   left,
@@ -106,159 +107,21 @@ class EditorController extends ChangeNotifier {
   WebElementBreakpointOverride effectiveOverride(
     WebElement element, [
     WebBreakpoint? breakpoint,
-  ]) {
-    final target = breakpoint ?? _activeBreakpoint;
-    var result = const WebElementBreakpointOverride();
-    if (target == WebBreakpoint.desktop) return result;
-
-    final tablet = element.responsiveOverrides[WebBreakpoint.tablet];
-    if (tablet != null) result = result.merge(tablet);
-
-    if (target == WebBreakpoint.mobile) {
-      final mobile = element.responsiveOverrides[WebBreakpoint.mobile];
-      if (mobile != null) result = result.merge(mobile);
-    }
-    return result;
-  }
+  ]) =>
+      ResponsiveLayoutResolver.effectiveOverride(
+        element,
+        breakpoint ?? _activeBreakpoint,
+      );
 
   WebElement resolveElement(
     WebElement element, {
     WebBreakpoint? breakpoint,
-  }) {
-    final target = breakpoint ?? _activeBreakpoint;
-    final targetWidth = target == WebBreakpoint.desktop
-        ? activePage.width
-        : target.previewWidth;
-    final targetHeight = activePage.height;
-    final override = effectiveOverride(element, target);
-
-    final widthMode = override.widthMode ?? element.widthMode;
-    final heightMode = override.heightMode ?? element.heightMode;
-    final widthPercent = override.widthPercent ?? element.widthPercent;
-    final heightPercent = override.heightPercent ?? element.heightPercent;
-    final anchorX = override.anchorX ?? element.anchorX;
-    final anchorY = override.anchorY ?? element.anchorY;
-
-    final baseRight =
-        math.max(0.0, activePage.width - (element.x + element.width));
-    final baseBottom =
-        math.max(0.0, activePage.height - (element.y + element.height));
-
-    final explicitX = override.x;
-    final explicitY = override.y;
-    final rawWidth = override.width ?? element.width;
-    final rawHeight = override.height ?? element.height;
-
-    double resolvedWidth = switch (widthMode) {
-      WebSizeMode.fixed => rawWidth,
-      WebSizeMode.percent => targetWidth * widthPercent,
-      WebSizeMode.fill => math.max(
-          32.0,
-          targetWidth - (explicitX ?? element.x) - baseRight,
-        ).toDouble(),
-      WebSizeMode.hug => _hugWidth(element, targetWidth),
-    };
-
-    double resolvedHeight = switch (heightMode) {
-      WebSizeMode.fixed => rawHeight,
-      WebSizeMode.percent => targetHeight * heightPercent,
-      WebSizeMode.fill => math.max(
-          24.0,
-          targetHeight - (explicitY ?? element.y) - baseBottom,
-        ).toDouble(),
-      WebSizeMode.hug => _hugHeight(element),
-    };
-
-    final minWidth = override.minWidth ?? element.minWidth;
-    final maxWidth = override.maxWidth ?? element.maxWidth;
-    final minHeight = override.minHeight ?? element.minHeight;
-    final maxHeight = override.maxHeight ?? element.maxHeight;
-
-    if (minWidth != null) resolvedWidth = math.max(resolvedWidth, minWidth);
-    if (maxWidth != null) resolvedWidth = math.min(resolvedWidth, maxWidth);
-    if (minHeight != null) resolvedHeight = math.max(resolvedHeight, minHeight);
-    if (maxHeight != null) resolvedHeight = math.min(resolvedHeight, maxHeight);
-
-    double resolvedX;
-    if (explicitX != null) {
-      resolvedX = explicitX;
-    } else if (widthMode == WebSizeMode.fill) {
-      resolvedX = element.x;
-    } else {
-      resolvedX = switch (anchorX) {
-        'center' => targetWidth / 2 +
-            (element.x + element.width / 2 - activePage.width / 2) -
-            resolvedWidth / 2,
-        'right' => targetWidth - baseRight - resolvedWidth,
-        _ => element.x,
-      };
-    }
-
-    double resolvedY;
-    if (explicitY != null) {
-      resolvedY = explicitY;
-    } else if (heightMode == WebSizeMode.fill) {
-      resolvedY = element.y;
-    } else {
-      resolvedY = switch (anchorY) {
-        'center' => targetHeight / 2 +
-            (element.y + element.height / 2 - activePage.height / 2) -
-            resolvedHeight / 2,
-        'bottom' => targetHeight - baseBottom - resolvedHeight,
-        _ => element.y,
-      };
-    }
-
-    return element.copyWith(
-      x: resolvedX,
-      y: resolvedY,
-      width: resolvedWidth,
-      height: resolvedHeight,
-      widthMode: widthMode,
-      heightMode: heightMode,
-      widthPercent: widthPercent,
-      heightPercent: heightPercent,
-      minWidth: minWidth,
-      clearMinWidth: minWidth == null,
-      maxWidth: maxWidth,
-      clearMaxWidth: maxWidth == null,
-      minHeight: minHeight,
-      clearMinHeight: minHeight == null,
-      maxHeight: maxHeight,
-      clearMaxHeight: maxHeight == null,
-      anchorX: anchorX,
-      anchorY: anchorY,
-      visible: override.visible ?? element.visible,
-    );
-  }
-
-  double _hugWidth(WebElement element, double availableWidth) {
-    if (element.type == WebElementType.image ||
-        element.type == WebElementType.container ||
-        element.type == WebElementType.section ||
-        element.type == WebElementType.card) {
-      return math.min(element.width, availableWidth);
-    }
-    final textWidth =
-        element.text.runes.length * element.fontSize * .58 +
-        math.max(20.0, element.letterSpacing * element.text.length) +
-        24;
-    return textWidth.clamp(32.0, availableWidth).toDouble();
-  }
-
-  double _hugHeight(WebElement element) {
-    if (element.type == WebElementType.image ||
-        element.type == WebElementType.container ||
-        element.type == WebElementType.section ||
-        element.type == WebElementType.card) {
-      return element.height;
-    }
-    final lines = math.max(1, '\n'.allMatches(element.text).length + 1);
-    return math.max(
-      24.0,
-      lines * element.fontSize * element.lineHeight + 20,
-    ).toDouble();
-  }
+  }) =>
+      ResponsiveLayoutResolver.resolve(
+        element,
+        activePage,
+        breakpoint ?? _activeBreakpoint,
+      );
 
   void resetActiveBreakpointOverrides(String id) {
     if (_activeBreakpoint == WebBreakpoint.desktop) return;
