@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../export/html_exporter.dart';
-import '../model/web_element.dart';
-import '../model/web_project.dart';
 import '../services/project_storage.dart';
 import 'editor_controller.dart';
 import 'widgets/canvas_view.dart';
@@ -171,10 +169,13 @@ class _EditorPageState extends State<EditorPage> {
                 switch (value) {
                   case 'desktop':
                     _controller.setPageSize(1440, page.height);
+                    break;
                   case 'tablet':
                     _controller.setPageSize(768, page.height);
+                    break;
                   case 'mobile':
                     _controller.setPageSize(390, page.height);
+                    break;
                 }
               },
               itemBuilder: (context) => const [
