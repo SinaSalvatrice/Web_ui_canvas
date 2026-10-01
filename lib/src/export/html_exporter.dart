@@ -41,7 +41,7 @@ class HtmlExporter {
     final cssFile = File(p.join(root.path, 'styles.css'));
 
     await htmlFile.writeAsString(_html(project, page, assetMap), flush: true);
-    await cssFile.writeAsString(_css(page), flush: true);
+    await cssFile.writeAsString(_css(page, assetMap), flush: true);
 
     return HtmlExportResult(
       directory: root,
@@ -57,21 +57,22 @@ class HtmlExporter {
     final map = <String, String>{};
     final used = <String>{};
     for (final element in page.elements) {
-      final sourcePath = element.imagePath;
-      if (sourcePath == null || map.containsKey(sourcePath)) continue;
-      final source = File(sourcePath);
-      if (!await source.exists()) continue;
+      for (final sourcePath in [element.imagePath, element.fontPath]) {
+        if (sourcePath == null || map.containsKey(sourcePath)) continue;
+        final source = File(sourcePath);
+        if (!await source.exists()) continue;
 
-      final base = p.basename(sourcePath);
-      final stem = p.basenameWithoutExtension(base);
-      final ext = p.extension(base);
-      var name = base;
-      var counter = 2;
-      while (!used.add(name.toLowerCase())) {
-        name = '${stem}_${counter++}$ext';
+        final base = p.basename(sourcePath);
+        final stem = p.basenameWithoutExtension(base);
+        final ext = p.extension(base);
+        var name = base;
+        var counter = 2;
+        while (!used.add(name.toLowerCase())) {
+          name = '${stem}_${counter++}$ext';
+        }
+        await source.copy(p.join(assets.path, name));
+        map[sourcePath] = 'assets/${Uri.encodeComponent(name)}';
       }
-      await source.copy(p.join(assets.path, name));
-      map[sourcePath] = 'assets/${Uri.encodeComponent(name)}';
     }
     return map;
   }
@@ -124,8 +125,26 @@ $body
     };
   }
 
-  String _css(WebPage page) {
-    final buffer = StringBuffer()
+  String _css(WebPage page, Map<String, String> assets) {
+    final buffer = StringBuffer();
+
+    final emittedFonts = <String>{};
+    for (final element in page.elements) {
+      final fontPath = element.fontPath;
+      final asset = fontPath == null ? null : assets[fontPath];
+      if (asset == null) continue;
+      final key = '${element.fontFamily}|$asset';
+      if (!emittedFonts.add(key)) continue;
+      buffer
+        ..writeln('@font-face {')
+        ..writeln('  font-family: ${_cssString(element.fontFamily)};')
+        ..writeln('  src: url("$asset");')
+        ..writeln('  font-display: swap;')
+        ..writeln('}')
+        ..writeln();
+    }
+
+    buffer
       ..writeln('html, body { margin: 0; min-height: 100%; }')
       ..writeln('body { font-family: Arial, sans-serif; }')
       ..writeln('.webui-page {')
@@ -150,6 +169,9 @@ $body
         ..writeln('  color: ${_color(element.foregroundColor)};')
         ..writeln('  font-size: ${element.fontSize}px;')
         ..writeln('  font-weight: ${element.fontWeight};')
+        ..writeln('  font-family: ${_cssString(element.fontFamily)}, sans-serif;')
+        ..writeln('  letter-spacing: ${element.letterSpacing}px;')
+        ..writeln('  line-height: ${element.lineHeight};')
         ..writeln('  text-align: ${element.textAlign};')
         ..writeln('  border-radius: ${element.borderRadius}px;')
         ..writeln(
@@ -190,6 +212,9 @@ $body
     final b = argb & 0xff;
     return 'rgba($r,$g,$b,${a.toStringAsFixed(3)})';
   }
+
+  String _cssString(String value) =>
+      "'${value.replaceAll(r"\", r"\\").replaceAll("'", r"\'")}'";
 
   String _escape(String value) => value
       .replaceAll('&', '&amp;')
