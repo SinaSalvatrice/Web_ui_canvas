@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../model/web_element.dart';
 import '../editor_controller.dart';
@@ -62,8 +63,7 @@ class _CanvasViewState extends State<CanvasView> {
           onPointerSignal: (signal) {
             if (signal is PointerScrollEvent &&
                 HardwareKeyboard.instance.isShiftPressed) {
-              // InteractiveViewer handles ordinary wheel zoom/pan. Shift is
-              // intentionally left available for later horizontal-pan policy.
+              // Reserved for the centralized horizontal-pan policy.
             }
           },
           child: AnimatedBuilder(
@@ -356,8 +356,8 @@ class _CanvasViewState extends State<CanvasView> {
               file,
               fit: _boxFit(element.imageFit),
               alignment: Alignment(
-                element.imagePositionX.clamp(-1, 1),
-                element.imagePositionY.clamp(-1, 1),
+                element.imagePositionX.clamp(-1.0, 1.0).toDouble(),
+                element.imagePositionY.clamp(-1.0, 1.0).toDouble(),
               ),
               errorBuilder: (_, __, ___) => _imagePlaceholder(),
             )
@@ -399,7 +399,7 @@ class _CanvasViewState extends State<CanvasView> {
     }
 
     return Opacity(
-      opacity: element.opacity.clamp(0, 1),
+      opacity: element.opacity.clamp(0.0, 1.0).toDouble(),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(element.borderRadius),
         child: DecoratedBox(
