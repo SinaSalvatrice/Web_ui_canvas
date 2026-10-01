@@ -39,3 +39,25 @@ After cloning on Windows:
     flutter run -d windows
 
 See docs/ARCHITECTURE.md and docs/ROADMAP.md.
+
+
+## Android
+
+The same editor codebase includes a compact touch layout for phones and tablets:
+
+- full-screen canvas instead of permanent sidebars
+- Elements, Properties and Layers as bottom sheets
+- touch pan and pinch zoom
+- larger resize and rotation targets
+- automatic initial canvas fit
+- the current desktop editor features remain shared with Android
+
+Build a release APK on Windows:
+
+    build_android.bat
+
+The script generates the lightweight Android host on first use, runs analysis with infos/warnings non-fatal, builds the release APK and opens Explorer on:
+
+    dist/web-ui-canvas-android.apk
+
+GitHub Actions also builds the APK and publishes it as the `Web-UI-Canvas-Android` workflow artifact.
