@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../model/web_element.dart';
 import '../editor_controller.dart';
 
 class LayersPanel extends StatelessWidget {
