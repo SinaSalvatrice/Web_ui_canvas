@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
+import '../model/layout.dart';
+import '../model/page_layout_engine.dart';
 import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
@@ -85,8 +87,20 @@ class HtmlExporter {
     WebPage page,
     Map<String, String> assets,
   ) {
-    final body = page.elements
-        .map((element) => _elementHtml(element, assets))
+    final ids = page.elements.map((element) => element.id).toSet();
+    final roots = page.elements.where(
+      (element) =>
+          element.parentId == null || !ids.contains(element.parentId),
+    );
+    final body = roots
+        .map(
+          (element) => _elementHtmlTree(
+            element,
+            page,
+            assets,
+            <String>{},
+          ),
+        )
         .join('\n');
 
     return '''<!doctype html>
@@ -106,24 +120,56 @@ $body
 ''';
   }
 
-  String _elementHtml(WebElement element, Map<String, String> assets) {
+  String _elementHtmlTree(
+    WebElement element,
+    WebPage page,
+    Map<String, String> assets,
+    Set<String> visiting,
+  ) {
+    if (!visiting.add(element.id)) return '';
+
+    final children = page.elements
+        .where((candidate) => candidate.parentId == element.id)
+        .map(
+          (child) => _elementHtmlTree(
+            child,
+            page,
+            assets,
+            visiting,
+          ),
+        )
+        .where((html) => html.isNotEmpty)
+        .join('\n');
+
+    visiting.remove(element.id);
+    return _elementHtml(element, assets, children);
+  }
+
+  String _elementHtml(
+    WebElement element,
+    Map<String, String> assets,
+    String children,
+  ) {
     final id = _escapeAttribute(element.id);
     final text = _escape(element.text);
+    final hasChildren = children.isNotEmpty;
+    final content = hasChildren ? children : text;
+
     return switch (element.type) {
       WebElementType.image =>
         '<div id="$id" class="webui-element webui-image-frame"><img class="webui-image-content" src="${_escapeAttribute(assets[element.imagePath] ?? '')}" alt=""></div>',
       WebElementType.button => element.href.trim().isNotEmpty
-          ? '<a id="$id" class="webui-element" href="${_escapeAttribute(element.href)}">$text</a>'
-          : '<button id="$id" class="webui-element" type="button">$text</button>',
+          ? '<a id="$id" class="webui-element" href="${_escapeAttribute(element.href)}">$content</a>'
+          : '<button id="$id" class="webui-element" type="button">$content</button>',
       WebElementType.input =>
         '<input id="$id" class="webui-element" placeholder="${_escapeAttribute(element.text)}">',
       WebElementType.navigation =>
-        '<nav id="$id" class="webui-element">$text</nav>',
+        '<nav id="$id" class="webui-element">$content</nav>',
       WebElementType.section =>
-        '<section id="$id" class="webui-element">$text</section>',
+        '<section id="$id" class="webui-element">$content</section>',
       WebElementType.divider =>
         '<div id="$id" class="webui-element" aria-hidden="true"></div>',
-      _ => '<div id="$id" class="webui-element">$text</div>',
+      _ => '<div id="$id" class="webui-element">$content</div>',
     };
   }
 
