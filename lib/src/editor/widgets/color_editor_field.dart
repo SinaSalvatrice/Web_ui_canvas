@@ -220,7 +220,6 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
             icon: const Icon(Icons.block),
             label: const Text('Transparent'),
           ),
-        const Spacer(),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
