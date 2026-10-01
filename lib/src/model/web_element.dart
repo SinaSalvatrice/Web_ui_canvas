@@ -7,10 +7,8 @@ enum WebElementType {
   section,
   navigation,
   input,
-  card,
-}
+  card;
 
-extension WebElementTypeX on WebElementType {
   String get label => switch (this) {
         WebElementType.text => 'Text',
         WebElementType.image => 'Image',
@@ -22,7 +20,9 @@ extension WebElementTypeX on WebElementType {
         WebElementType.input => 'Input',
         WebElementType.card => 'Card',
       };
+}
 
+extension WebElementTypeX on WebElementType {
   String get category => switch (this) {
         WebElementType.text || WebElementType.image => 'Content',
         WebElementType.button || WebElementType.input => 'Controls',
