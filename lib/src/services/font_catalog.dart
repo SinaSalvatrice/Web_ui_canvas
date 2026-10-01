@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 class FontEntry {
