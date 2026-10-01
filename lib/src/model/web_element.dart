@@ -93,6 +93,10 @@ class WebElement {
     this.opacity = 1,
     this.fontSize = 22,
     this.fontWeight = 400,
+    this.fontFamily = 'Arial',
+    this.fontPath,
+    this.letterSpacing = 0,
+    this.lineHeight = 1.2,
     this.textAlign = 'left',
     this.anchorX = 'left',
     this.anchorY = 'top',
@@ -122,6 +126,10 @@ class WebElement {
   final double opacity;
   final double fontSize;
   final int fontWeight;
+  final String fontFamily;
+  final String? fontPath;
+  final double letterSpacing;
+  final double lineHeight;
   final String textAlign;
   final String anchorX;
   final String anchorY;
@@ -191,6 +199,11 @@ class WebElement {
     double? opacity,
     double? fontSize,
     int? fontWeight,
+    String? fontFamily,
+    String? fontPath,
+    bool clearFontPath = false,
+    double? letterSpacing,
+    double? lineHeight,
     String? textAlign,
     String? anchorX,
     String? anchorY,
@@ -221,6 +234,10 @@ class WebElement {
       opacity: opacity ?? this.opacity,
       fontSize: fontSize ?? this.fontSize,
       fontWeight: fontWeight ?? this.fontWeight,
+      fontFamily: fontFamily ?? this.fontFamily,
+      fontPath: clearFontPath ? null : (fontPath ?? this.fontPath),
+      letterSpacing: letterSpacing ?? this.letterSpacing,
+      lineHeight: lineHeight ?? this.lineHeight,
       textAlign: textAlign ?? this.textAlign,
       anchorX: anchorX ?? this.anchorX,
       anchorY: anchorY ?? this.anchorY,
@@ -252,6 +269,10 @@ class WebElement {
         'opacity': opacity,
         'fontSize': fontSize,
         'fontWeight': fontWeight,
+        'fontFamily': fontFamily,
+        'fontPath': fontPath,
+        'letterSpacing': letterSpacing,
+        'lineHeight': lineHeight,
         'textAlign': textAlign,
         'anchorX': anchorX,
         'anchorY': anchorY,
@@ -282,6 +303,10 @@ class WebElement {
         opacity: (json['opacity'] as num?)?.toDouble() ?? 1,
         fontSize: (json['fontSize'] as num?)?.toDouble() ?? 22,
         fontWeight: (json['fontWeight'] as num?)?.toInt() ?? 400,
+        fontFamily: json['fontFamily'] as String? ?? 'Arial',
+        fontPath: json['fontPath'] as String?,
+        letterSpacing: (json['letterSpacing'] as num?)?.toDouble() ?? 0,
+        lineHeight: (json['lineHeight'] as num?)?.toDouble() ?? 1.2,
         textAlign: json['textAlign'] as String? ?? 'left',
         anchorX: json['anchorX'] as String? ?? 'left',
         anchorY: json['anchorY'] as String? ?? 'top',

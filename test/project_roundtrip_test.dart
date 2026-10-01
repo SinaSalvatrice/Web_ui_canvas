@@ -13,6 +13,10 @@ void main() {
       width: 300,
       height: 80,
       text: 'Hello',
+      fontFamily: 'Circuit Test',
+      fontPath: r'C:\Fonts\CircuitTest.ttf',
+      letterSpacing: 1.75,
+      lineHeight: 1.45,
       imagePositionX: -.4,
       imagePositionY: .35,
       imageScale: 2.25,
@@ -38,6 +42,10 @@ void main() {
     expect(restored.pages.single.elements.single.text, 'Hello');
     expect(restored.pages.single.width, 1440);
     final restoredElement = restored.pages.single.elements.single;
+    expect(restoredElement.fontFamily, 'Circuit Test');
+    expect(restoredElement.fontPath, r'C:\Fonts\CircuitTest.ttf');
+    expect(restoredElement.letterSpacing, 1.75);
+    expect(restoredElement.lineHeight, 1.45);
     expect(restoredElement.imagePositionX, -.4);
     expect(restoredElement.imagePositionY, .35);
     expect(restoredElement.imageScale, 2.25);
