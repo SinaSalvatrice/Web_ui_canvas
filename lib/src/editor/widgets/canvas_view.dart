@@ -322,16 +322,22 @@ class _CanvasViewState extends State<CanvasView> {
     switch (action) {
       case _CanvasContextAction.copy:
         controller.copySelected();
+        break;
       case _CanvasContextAction.paste:
         controller.pasteCopied();
+        break;
       case _CanvasContextAction.duplicate:
         controller.duplicateSelected();
+        break;
       case _CanvasContextAction.forward:
         controller.moveLayer(1);
+        break;
       case _CanvasContextAction.backward:
         controller.moveLayer(-1);
+        break;
       case _CanvasContextAction.delete:
         controller.removeSelected();
+        break;
       case null:
         break;
     }
