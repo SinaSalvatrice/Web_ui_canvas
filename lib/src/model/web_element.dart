@@ -1,3 +1,5 @@
+import 'responsive.dart';
+
 enum WebElementType {
   text,
   image,
@@ -104,6 +106,15 @@ class WebElement {
     this.imagePositionX = 0,
     this.imagePositionY = 0,
     this.imageScale = 1,
+    this.widthMode = WebSizeMode.fixed,
+    this.heightMode = WebSizeMode.fixed,
+    this.widthPercent = 1,
+    this.heightPercent = 1,
+    this.minWidth,
+    this.maxWidth,
+    this.minHeight,
+    this.maxHeight,
+    this.responsiveOverrides = const {},
   });
 
   final String id;
@@ -137,6 +148,15 @@ class WebElement {
   final double imagePositionX;
   final double imagePositionY;
   final double imageScale;
+  final WebSizeMode widthMode;
+  final WebSizeMode heightMode;
+  final double widthPercent;
+  final double heightPercent;
+  final double? minWidth;
+  final double? maxWidth;
+  final double? minHeight;
+  final double? maxHeight;
+  final Map<WebBreakpoint, WebElementBreakpointOverride> responsiveOverrides;
 
   factory WebElement.fresh({
     required String id,
@@ -211,6 +231,19 @@ class WebElement {
     double? imagePositionX,
     double? imagePositionY,
     double? imageScale,
+    WebSizeMode? widthMode,
+    WebSizeMode? heightMode,
+    double? widthPercent,
+    double? heightPercent,
+    double? minWidth,
+    bool clearMinWidth = false,
+    double? maxWidth,
+    bool clearMaxWidth = false,
+    double? minHeight,
+    bool clearMinHeight = false,
+    double? maxHeight,
+    bool clearMaxHeight = false,
+    Map<WebBreakpoint, WebElementBreakpointOverride>? responsiveOverrides,
   }) {
     return WebElement(
       id: id,
@@ -245,6 +278,15 @@ class WebElement {
       imagePositionX: imagePositionX ?? this.imagePositionX,
       imagePositionY: imagePositionY ?? this.imagePositionY,
       imageScale: imageScale ?? this.imageScale,
+      widthMode: widthMode ?? this.widthMode,
+      heightMode: heightMode ?? this.heightMode,
+      widthPercent: widthPercent ?? this.widthPercent,
+      heightPercent: heightPercent ?? this.heightPercent,
+      minWidth: clearMinWidth ? null : (minWidth ?? this.minWidth),
+      maxWidth: clearMaxWidth ? null : (maxWidth ?? this.maxWidth),
+      minHeight: clearMinHeight ? null : (minHeight ?? this.minHeight),
+      maxHeight: clearMaxHeight ? null : (maxHeight ?? this.maxHeight),
+      responsiveOverrides: responsiveOverrides ?? this.responsiveOverrides,
     );
   }
 
@@ -280,6 +322,19 @@ class WebElement {
         'imagePositionX': imagePositionX,
         'imagePositionY': imagePositionY,
         'imageScale': imageScale,
+        'widthMode': widthMode.name,
+        'heightMode': heightMode.name,
+        'widthPercent': widthPercent,
+        'heightPercent': heightPercent,
+        'minWidth': minWidth,
+        'maxWidth': maxWidth,
+        'minHeight': minHeight,
+        'maxHeight': maxHeight,
+        if (responsiveOverrides.isNotEmpty)
+          'responsiveOverrides': {
+            for (final entry in responsiveOverrides.entries)
+              entry.key.name: entry.value.toJson(),
+          },
       };
 
   factory WebElement.fromJson(Map<String, Object?> json) => WebElement(
@@ -316,5 +371,25 @@ class WebElement {
         imagePositionY:
             (json['imagePositionY'] as num?)?.toDouble() ?? 0,
         imageScale: (json['imageScale'] as num?)?.toDouble() ?? 1,
+        widthMode: WebSizeMode.values.byName(
+          json['widthMode'] as String? ?? WebSizeMode.fixed.name,
+        ),
+        heightMode: WebSizeMode.values.byName(
+          json['heightMode'] as String? ?? WebSizeMode.fixed.name,
+        ),
+        widthPercent: (json['widthPercent'] as num?)?.toDouble() ?? 1,
+        heightPercent: (json['heightPercent'] as num?)?.toDouble() ?? 1,
+        minWidth: (json['minWidth'] as num?)?.toDouble(),
+        maxWidth: (json['maxWidth'] as num?)?.toDouble(),
+        minHeight: (json['minHeight'] as num?)?.toDouble(),
+        maxHeight: (json['maxHeight'] as num?)?.toDouble(),
+        responsiveOverrides: {
+          for (final entry
+              in ((json['responsiveOverrides'] as Map?) ?? const {}).entries)
+            WebBreakpoint.values.byName(entry.key as String):
+                WebElementBreakpointOverride.fromJson(
+              Map<String, Object?>.from(entry.value as Map),
+            ),
+        },
       );
 }
