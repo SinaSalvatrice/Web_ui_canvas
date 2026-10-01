@@ -612,14 +612,35 @@ class EditorController extends ChangeNotifier {
 
   void addElement(WebElementType type, {double? x, double? y}) {
     final page = activePage;
-    final defaultX =
+    final desktopX =
         math.max(24.0, (page.width - type.defaultWidth) / 2).toDouble();
-    final element = WebElement.fresh(
+    final targetWidth = viewportWidth;
+    final targetX = snap(
+      x ?? math.max(24.0, (targetWidth - type.defaultWidth) / 2).toDouble(),
+    );
+    final targetY = snap(y ?? 80.0 + page.elements.length * 28.0);
+
+    var element = WebElement.fresh(
       id: 'element_${_nextId++}',
       type: type,
-      x: snap(x ?? defaultX),
-      y: snap(y ?? 80.0 + page.elements.length * 28.0),
+      x: _activeBreakpoint == WebBreakpoint.desktop ? targetX : desktopX,
+      y: targetY,
     );
+
+    if (_activeBreakpoint != WebBreakpoint.desktop) {
+      final fittedWidth =
+          math.min(type.defaultWidth, math.max(32.0, targetWidth - 48));
+      element = element.copyWith(
+        responsiveOverrides: {
+          _activeBreakpoint: WebElementBreakpointOverride(
+            x: targetX,
+            y: targetY,
+            width: fittedWidth,
+          ),
+        },
+      );
+    }
+
     _replacePage(
       page.copyWith(elements: [...page.elements, element]),
       commit: true,
