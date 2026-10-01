@@ -14,6 +14,21 @@ class LayersPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final elements = controller.activePage.elements;
+    final byId = {for (final element in elements) element.id: element};
+
+    int depthOf(String id) {
+      var depth = 0;
+      var current = byId[id];
+      final seen = <String>{id};
+      while (current?.parentId != null &&
+          seen.add(current!.parentId!) &&
+          byId.containsKey(current.parentId)) {
+        depth += 1;
+        current = byId[current.parentId];
+      }
+      return depth.clamp(0, 8);
+    }
+
     return Column(
       children: [
         Padding(
@@ -46,6 +61,10 @@ class LayersPanel extends StatelessWidget {
               for (final element in elements.reversed)
                 ListTile(
                   dense: true,
+                  contentPadding: EdgeInsets.only(
+                    left: 8 + depthOf(element.id) * 14,
+                    right: 8,
+                  ),
                   selected: controller.selectedIds.contains(element.id),
                   leading: IconButton(
                     visualDensity: VisualDensity.compact,
@@ -64,7 +83,12 @@ class LayersPanel extends StatelessWidget {
                         : element.text.split('\n').first,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: Text(element.type.label),
+                  subtitle: Text(
+                    element.canContainChildren &&
+                            element.layoutMode.name != 'free'
+                        ? '${element.type.label} · ${element.layoutMode.label}'
+                        : element.type.label,
+                  ),
                   trailing: IconButton(
                     visualDensity: VisualDensity.compact,
                     tooltip: element.locked ? 'Unlock' : 'Lock',
