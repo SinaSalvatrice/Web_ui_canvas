@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../model/web_element.dart';
 import '../editor_controller.dart';
@@ -46,7 +47,7 @@ class LayersPanel extends StatelessWidget {
               for (final element in elements.reversed)
                 ListTile(
                   dense: true,
-                  selected: element.id == controller.selectedId,
+                  selected: controller.selectedIds.contains(element.id),
                   leading: IconButton(
                     visualDensity: VisualDensity.compact,
                     tooltip: element.visible ? 'Hide' : 'Show',
@@ -76,7 +77,16 @@ class LayersPanel extends StatelessWidget {
                       size: 17,
                     ),
                   ),
-                  onTap: () => controller.select(element.id),
+                  onTap: () {
+                    final keyboard = HardwareKeyboard.instance;
+                    final additive =
+                        keyboard.isControlPressed || keyboard.isMetaPressed;
+                    if (additive) {
+                      controller.toggleSelection(element.id);
+                    } else {
+                      controller.selectOnly(element.id);
+                    }
+                  },
                 ),
             ],
           ),
