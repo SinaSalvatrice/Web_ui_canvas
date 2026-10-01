@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../model/web_element.dart';
@@ -265,18 +266,34 @@ class InspectorPanel extends StatelessWidget {
     double value,
     ValueChanged<double> onChanged,
   ) {
-    return TextFormField(
-      key: ValueKey('$label-${value.toStringAsFixed(3)}'),
-      initialValue: _pretty(value),
-      decoration: InputDecoration(labelText: label),
-      keyboardType: const TextInputType.numberWithOptions(
-        decimal: true,
-        signed: true,
-      ),
-      onFieldSubmitted: (text) {
-        final parsed = double.tryParse(text.replaceAll(',', '.'));
-        if (parsed != null) onChanged(parsed);
+    return Listener(
+      onPointerSignal: (event) {
+        if (event is! PointerScrollEvent) return;
+        GestureBinding.instance.pointerSignalResolver.register(
+          event,
+          (resolved) {
+            if (resolved is! PointerScrollEvent) return;
+            final amount = resolved.scrollDelta.dy != 0
+                ? resolved.scrollDelta.dy
+                : resolved.scrollDelta.dx;
+            if (amount == 0) return;
+            onChanged(value + (amount < 0 ? 1 : -1));
+          },
+        );
       },
+      child: TextFormField(
+        key: ValueKey('$label-${value.toStringAsFixed(3)}'),
+        initialValue: _pretty(value),
+        decoration: InputDecoration(labelText: label),
+        keyboardType: const TextInputType.numberWithOptions(
+          decimal: true,
+          signed: true,
+        ),
+        onFieldSubmitted: (text) {
+          final parsed = double.tryParse(text.replaceAll(',', '.'));
+          if (parsed != null) onChanged(parsed);
+        },
+      ),
     );
   }
 
