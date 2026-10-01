@@ -251,7 +251,7 @@ class InspectorPanel extends StatelessWidget {
                       element.gridColumns.toDouble(),
                       (value) => controller.updateContainerLayout(
                         element.id,
-                        gridColumns: value.round().clamp(1, 12),
+                        gridColumns: value.round().clamp(1, 12).toInt(),
                       ),
                     ),
                   ),
