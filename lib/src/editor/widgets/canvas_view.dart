@@ -90,6 +90,7 @@ class _CanvasViewState extends State<CanvasView> {
 
   double? _rotationPointerStart;
   double _rotationValueStart = 0;
+  bool _didInitialFit = false;
 
   double get _scale => widget.viewportController.zoom;
 
@@ -97,6 +98,12 @@ class _CanvasViewState extends State<CanvasView> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final page = controller.activePage;
+    final touchMode = MediaQuery.sizeOf(context).shortestSide < 700;
+
+    if (touchMode && !_didInitialFit) {
+      _didInitialFit = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitCanvasToViewport());
+    }
 
     return DragTarget<WebElementType>(
       onAcceptWithDetails: (details) {
@@ -131,8 +138,8 @@ class _CanvasViewState extends State<CanvasView> {
               return InteractiveViewer(
                 transformationController: _transform,
                 constrained: false,
-                panEnabled: false,
-                scaleEnabled: false,
+                panEnabled: touchMode,
+                scaleEnabled: touchMode,
                 minScale: .20,
                 maxScale: 4,
                 boundaryMargin: const EdgeInsets.all(1000),
@@ -430,8 +437,9 @@ class _CanvasViewState extends State<CanvasView> {
   }
 
   Widget _resizeHandle(WebElement element, _ResizeHandle handle) {
-    final hit = 30 / _scale;
-    final visual = 12 / _scale;
+    final touch = MediaQuery.sizeOf(context).shortestSide < 700;
+    final hit = (touch ? 48.0 : 30.0) / _scale;
+    final visual = (touch ? 16.0 : 12.0) / _scale;
     final left = switch (handle.h) {
       -1 => -hit / 2,
       0 => element.width / 2 - hit / 2,
@@ -485,11 +493,13 @@ class _CanvasViewState extends State<CanvasView> {
   }
 
   Widget _rotationHandle(WebElement element) {
-    final hit = 34 / _scale;
-    final visual = 14 / _scale;
+    final touch = MediaQuery.sizeOf(context).shortestSide < 700;
+    final hit = (touch ? 50.0 : 34.0) / _scale;
+    final visual = (touch ? 18.0 : 14.0) / _scale;
+    final offset = (touch ? 66.0 : 54.0) / _scale;
     return Positioned(
       left: element.width / 2 - hit / 2,
-      top: -54 / _scale,
+      top: -offset,
       width: hit,
       height: hit,
       child: MouseRegion(
@@ -636,6 +646,38 @@ class _CanvasViewState extends State<CanvasView> {
           child: Icon(Icons.image_outlined, size: 42, color: Colors.black38),
         ),
       );
+
+  void _fitCanvasToViewport() {
+    if (!mounted) return;
+    final render = _viewportKey.currentContext?.findRenderObject();
+    if (render is! RenderBox || !render.hasSize) return;
+
+    final page = widget.controller.activePage;
+    final viewport = render.size;
+    if (viewport.width <= 0 || viewport.height <= 0) return;
+
+    final availableWidth = math.max(40.0, viewport.width - 32);
+    final availableHeight = math.max(40.0, viewport.height - 32);
+    final scale = math.min(
+      1.0,
+      math.max(
+        .20,
+        math.min(
+          availableWidth / page.width,
+          availableHeight / page.height,
+        ),
+      ),
+    );
+    final centerX = _margin + page.width / 2;
+    final centerY = _margin + page.height / 2;
+    final matrix = Matrix4.diagonal3Values(scale, scale, 1)
+      ..setTranslationRaw(
+        viewport.width / 2 - centerX * scale,
+        viewport.height / 2 - centerY * scale,
+        0,
+      );
+    _transform.value = matrix;
+  }
 
   Offset? _sceneFromGlobal(Offset global) {
     final render = _viewportKey.currentContext?.findRenderObject();

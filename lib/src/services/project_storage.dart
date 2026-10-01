@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
@@ -9,36 +10,53 @@ class ProjectStorage {
   const ProjectStorage();
 
   Future<(WebProject, String)?> openProject() async {
-    final result = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: const ['webui'],
-      allowMultiple: false,
       dialogTitle: 'Open Web UI Canvas project',
     );
-    final path = result?.files.single.path;
-    if (path == null) return null;
-    final source = await File(path).readAsString();
+    if (file == null) return null;
+
+    final source = utf8.decode(await file.readAsBytes());
     final json = jsonDecode(source) as Map<String, dynamic>;
-    return (WebProject.fromJson(json.cast<String, Object?>()), path);
+    final location = file.path ?? file.uri.toString();
+    return (WebProject.fromJson(json.cast<String, Object?>()), location);
   }
 
   Future<String?> saveProject(
     WebProject project, {
     String? existingPath,
   }) async {
-    var path = existingPath;
-    path ??= await FilePicker.platform.saveFile(
-        dialogTitle: 'Save Web UI Canvas project',
-        fileName: 'website.webui',
-        type: FileType.custom,
-        allowedExtensions: const ['webui'],
-      );
-    if (path == null) return null;
-    if (!path.toLowerCase().endsWith('.webui')) {
-      path = '$path.webui';
-    }
     final text = const JsonEncoder.withIndent('  ').convert(project.toJson());
-    await File(path).writeAsString('$text\n', flush: true);
-    return path;
+    final bytes = Uint8List.fromList(utf8.encode('$text\n'));
+
+    if (existingPath != null) {
+      final existingUri = Uri.tryParse(existingPath);
+      final isDirectFile = existingUri == null ||
+          !existingUri.hasScheme ||
+          existingUri.scheme == 'file';
+
+      if (isDirectFile) {
+        var path = existingUri?.scheme == 'file'
+            ? existingUri!.toFilePath()
+            : existingPath;
+        if (!path.toLowerCase().endsWith('.webui')) {
+          path = '$path.webui';
+        }
+        await File(path).writeAsBytes(bytes, flush: true);
+        return path;
+      }
+    }
+
+    final uri = await FilePicker.saveFile(
+      dialogTitle: 'Save Web UI Canvas project',
+      fileName: 'website.webui',
+      bytes: bytes,
+      mimeType: 'application/json',
+      type: FileType.custom,
+      allowedExtensions: const ['webui'],
+    );
+    if (uri == null) return null;
+    return uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
   }
 }

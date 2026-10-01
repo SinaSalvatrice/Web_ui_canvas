@@ -320,12 +320,11 @@ class InspectorPanel extends StatelessWidget {
   }
 
   Future<void> _pickImage(WebElement element) async {
-    final result = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.image,
-      allowMultiple: false,
       dialogTitle: 'Choose image',
     );
-    final path = result?.files.single.path;
+    final path = file?.path;
     if (path != null) {
       _update(element.copyWith(imagePath: path));
     }

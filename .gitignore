@@ -8,3 +8,5 @@ build/
 .vscode/
 *.iml
 windows/
+android/
+dist/

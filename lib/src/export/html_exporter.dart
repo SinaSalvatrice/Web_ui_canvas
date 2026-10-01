@@ -23,7 +23,7 @@ class HtmlExporter {
   const HtmlExporter();
 
   Future<HtmlExportResult?> export(WebProject project) async {
-    final chosen = await FilePicker.platform.getDirectoryPath(
+    final chosen = await FilePicker.getDirectoryPath(
       dialogTitle: 'Choose export folder',
     );
     if (chosen == null) return null;

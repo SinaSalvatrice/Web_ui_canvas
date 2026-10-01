@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,8 @@ import 'widgets/canvas_view.dart';
 import 'widgets/component_library.dart';
 import 'widgets/inspector_panel.dart';
 import 'widgets/layers_panel.dart';
+
+enum _MobilePanel { elements, properties, layers }
 
 class EditorPage extends StatefulWidget {
   const EditorPage({super.key});
@@ -35,16 +38,23 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
 
   bool get _isDirty => _controller.projectFingerprint != _cleanFingerprint;
 
+  bool get _usesDesktopWindowManager =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
   @override
   void initState() {
     super.initState();
     _cleanFingerprint = _controller.projectFingerprint;
-    windowManager.addListener(this);
+    if (_usesDesktopWindowManager) {
+      windowManager.addListener(this);
+    }
   }
 
   @override
   void dispose() {
-    windowManager.removeListener(this);
+    if (_usesDesktopWindowManager) {
+      windowManager.removeListener(this);
+    }
     _controller.dispose();
     _viewportController.dispose();
     _shortcuts.dispose();
@@ -61,71 +71,332 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
           autofocus: true,
           onKeyEvent: _onKey,
           child: Scaffold(
-            body: Column(
-              children: [
-                _topBar(context),
-                const Divider(height: 1),
-                Expanded(
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 230,
-                        child: ComponentLibrary(
-                          onAdd: (type) {
-                            _controller.addElement(type);
-                            _shortcuts.requestFocus();
-                          },
-                        ),
-                      ),
-                      const VerticalDivider(width: 1),
-                      Expanded(
-                        child: CanvasView(
-                          controller: _controller,
-                          viewportController: _viewportController,
-                          previewMode: _previewMode,
-                        ),
-                      ),
-                      const VerticalDivider(width: 1),
-                      SizedBox(
-                        width: 310,
-                        child: Column(
-                          children: [
-                            SegmentedButton<int>(
-                              segments: const [
-                                ButtonSegment(
-                                  value: 0,
-                                  label: Text('Properties'),
-                                  icon: Icon(Icons.tune, size: 17),
-                                ),
-                                ButtonSegment(
-                                  value: 1,
-                                  label: Text('Layers'),
-                                  icon: Icon(Icons.layers_outlined, size: 17),
-                                ),
-                              ],
-                              selected: {_rightTab},
-                              onSelectionChanged: (selection) {
-                                setState(() => _rightTab = selection.first);
-                              },
-                            ),
-                            const Divider(height: 1),
-                            Expanded(
-                              child: _rightTab == 0
-                                  ? InspectorPanel(controller: _controller)
-                                  : LayersPanel(controller: _controller),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            body: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 900;
+                  return compact
+                      ? _mobileLayout(context)
+                      : _desktopLayout(context);
+                },
+              ),
             ),
           ),
         );
       },
     );
+  }
+
+  Widget _desktopLayout(BuildContext context) {
+    return Column(
+      children: [
+        _topBar(context),
+        const Divider(height: 1),
+        Expanded(
+          child: Row(
+            children: [
+              SizedBox(
+                width: 230,
+                child: ComponentLibrary(
+                  onAdd: (type) {
+                    _controller.addElement(type);
+                    _shortcuts.requestFocus();
+                  },
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: CanvasView(
+                  controller: _controller,
+                  viewportController: _viewportController,
+                  previewMode: _previewMode,
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              SizedBox(
+                width: 310,
+                child: Column(
+                  children: [
+                    SegmentedButton<int>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 0,
+                          label: Text('Properties'),
+                          icon: Icon(Icons.tune, size: 17),
+                        ),
+                        ButtonSegment(
+                          value: 1,
+                          label: Text('Layers'),
+                          icon: Icon(Icons.layers_outlined, size: 17),
+                        ),
+                      ],
+                      selected: {_rightTab},
+                      onSelectionChanged: (selection) {
+                        setState(() => _rightTab = selection.first);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: _rightTab == 0
+                          ? InspectorPanel(controller: _controller)
+                          : LayersPanel(controller: _controller),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _mobileLayout(BuildContext context) {
+    return Column(
+      children: [
+        _mobileTopBar(context),
+        const Divider(height: 1),
+        Expanded(
+          child: CanvasView(
+            controller: _controller,
+            viewportController: _viewportController,
+            previewMode: _previewMode,
+          ),
+        ),
+        const Divider(height: 1),
+        _mobileToolBar(),
+      ],
+    );
+  }
+
+  Widget _mobileTopBar(BuildContext context) {
+    final page = _controller.activePage;
+    return SizedBox(
+      height: 56,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(
+                _isDirty ? 'Web UI Canvas *' : 'Web UI Canvas',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const Spacer(),
+            IconButton(
+              tooltip: 'Undo',
+              onPressed: _controller.canUndo ? _controller.undo : null,
+              icon: const Icon(Icons.undo),
+            ),
+            IconButton(
+              tooltip: 'Redo',
+              onPressed: _controller.canRedo ? _controller.redo : null,
+              icon: const Icon(Icons.redo),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Project and canvas',
+              onSelected: _handleMobileMenu,
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'open',
+                  child: ListTile(
+                    leading: Icon(Icons.folder_open),
+                    title: Text('Open project'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'save',
+                  child: ListTile(
+                    leading: Icon(Icons.save_outlined),
+                    title: Text('Save project'),
+                  ),
+                ),
+                const PopupMenuDivider(),
+                CheckedPopupMenuItem(
+                  value: 'grid',
+                  checked: _controller.gridEnabled,
+                  child: const Text('Grid'),
+                ),
+                CheckedPopupMenuItem(
+                  value: 'snap',
+                  checked: _controller.snapEnabled,
+                  child: const Text('Snap'),
+                ),
+                CheckedPopupMenuItem(
+                  value: 'preview',
+                  checked: _previewMode,
+                  child: const Text('Preview'),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'desktop',
+                  child: Text('Canvas · Desktop 1440'),
+                ),
+                const PopupMenuItem(
+                  value: 'tablet',
+                  child: Text('Canvas · Tablet 900'),
+                ),
+                const PopupMenuItem(
+                  value: 'mobile',
+                  child: Text('Canvas · Mobile 390'),
+                ),
+                const PopupMenuItem(
+                  value: 'custom',
+                  child: Text('Canvas · Custom size…'),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'resetView',
+                  child: ListTile(
+                    leading: Icon(Icons.center_focus_strong),
+                    title: Text('Reset view'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'export',
+                  child: ListTile(
+                    leading: Icon(Icons.output),
+                    title: Text('Export HTML/CSS'),
+                  ),
+                ),
+              ],
+              icon: const Icon(Icons.more_vert),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                page.width.toStringAsFixed(0),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mobileToolBar() {
+    return Material(
+      child: SizedBox(
+        height: 68,
+        child: Row(
+          children: [
+            Expanded(
+              child: _mobileToolButton(
+                icon: Icons.add_box_outlined,
+                label: 'Elements',
+                onPressed: () => _showMobilePanel(_MobilePanel.elements),
+              ),
+            ),
+            Expanded(
+              child: _mobileToolButton(
+                icon: Icons.tune,
+                label: 'Properties',
+                onPressed: () => _showMobilePanel(_MobilePanel.properties),
+              ),
+            ),
+            Expanded(
+              child: _mobileToolButton(
+                icon: Icons.layers_outlined,
+                label: 'Layers',
+                onPressed: () => _showMobilePanel(_MobilePanel.layers),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mobileToolButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 24),
+          const SizedBox(height: 3),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showMobilePanel(_MobilePanel panel) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final height = MediaQuery.sizeOf(sheetContext).height * .78;
+        return SizedBox(
+          height: height,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return switch (panel) {
+                _MobilePanel.elements => ComponentLibrary(
+                    onAdd: (type) {
+                      _controller.addElement(type);
+                      Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                _MobilePanel.properties =>
+                  InspectorPanel(controller: _controller),
+                _MobilePanel.layers => LayersPanel(controller: _controller),
+              };
+            },
+          ),
+        );
+      },
+    );
+    _shortcuts.requestFocus();
+  }
+
+  void _handleMobileMenu(String value) {
+    final page = _controller.activePage;
+    switch (value) {
+      case 'open':
+        unawaited(_open());
+        break;
+      case 'save':
+        unawaited(_save());
+        break;
+      case 'grid':
+        setState(() => _controller.gridEnabled = !_controller.gridEnabled);
+        break;
+      case 'snap':
+        setState(() => _controller.snapEnabled = !_controller.snapEnabled);
+        break;
+      case 'preview':
+        setState(() => _previewMode = !_previewMode);
+        break;
+      case 'desktop':
+        _controller.setPageSize(1440, page.height);
+        break;
+      case 'tablet':
+        _controller.setPageSize(900, page.height);
+        break;
+      case 'mobile':
+        _controller.setPageSize(390, page.height);
+        break;
+      case 'custom':
+        unawaited(_editCanvasSize());
+        break;
+      case 'resetView':
+        _viewportController.reset();
+        break;
+      case 'export':
+        unawaited(_export());
+        break;
+    }
   }
 
   Widget _topBar(BuildContext context) {
@@ -516,7 +787,9 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
 
   @override
   void onWindowClose() {
-    unawaited(_handleWindowClose());
+    if (_usesDesktopWindowManager) {
+      unawaited(_handleWindowClose());
+    }
   }
 
   Future<void> _handleWindowClose() async {
