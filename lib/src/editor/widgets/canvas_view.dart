@@ -524,12 +524,11 @@ class _CanvasViewState extends State<CanvasView> {
   }
 
   Future<void> _replaceImage(WebElement element) async {
-    final result = await FilePicker.platform.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.image,
-      allowMultiple: false,
       dialogTitle: 'Choose image',
     );
-    final path = result?.files.single.path;
+    final path = file?.path;
     if (path == null) return;
 
     WebElement? current;
@@ -723,6 +722,10 @@ class _CanvasViewState extends State<CanvasView> {
             style: TextStyle(
               color: foreground.withValues(alpha: .55),
               fontSize: element.fontSize,
+              fontWeight: _fontWeight(element.fontWeight),
+              fontFamily: element.fontFamily,
+              letterSpacing: element.letterSpacing,
+              height: element.lineHeight,
             ),
           ),
         ),
@@ -739,6 +742,9 @@ class _CanvasViewState extends State<CanvasView> {
               color: foreground,
               fontSize: element.fontSize,
               fontWeight: _fontWeight(element.fontWeight),
+              fontFamily: element.fontFamily,
+              letterSpacing: element.letterSpacing,
+              height: element.lineHeight,
             ),
           ),
         ),

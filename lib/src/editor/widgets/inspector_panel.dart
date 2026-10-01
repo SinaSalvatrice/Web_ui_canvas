@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../../model/web_element.dart';
 import '../editor_controller.dart';
+import 'color_editor_field.dart';
+import 'font_picker_field.dart';
 
 class InspectorPanel extends StatelessWidget {
   const InspectorPanel({
@@ -103,6 +105,94 @@ class InspectorPanel extends StatelessWidget {
             element.copyWith(opacity: (value / 100).clamp(0.0, 1.0).toDouble()),
           ),
         ),
+        const Divider(height: 26),
+        _section(context, 'Arrange'),
+        Text(
+          controller.selectedIds.length == 1
+              ? 'Align to canvas'
+              : 'Align selected elements',
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            _arrangeButton(
+              context,
+              tooltip: 'Align left',
+              icon: Icons.align_horizontal_left,
+              onPressed: () =>
+                  controller.alignSelection(SelectionAlignment.left),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align horizontal center',
+              icon: Icons.align_horizontal_center,
+              onPressed: () => controller.alignSelection(
+                SelectionAlignment.horizontalCenter,
+              ),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align right',
+              icon: Icons.align_horizontal_right,
+              onPressed: () =>
+                  controller.alignSelection(SelectionAlignment.right),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align top',
+              icon: Icons.align_vertical_top,
+              onPressed: () =>
+                  controller.alignSelection(SelectionAlignment.top),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align vertical center',
+              icon: Icons.align_vertical_center,
+              onPressed: () => controller.alignSelection(
+                SelectionAlignment.verticalCenter,
+              ),
+            ),
+            _arrangeButton(
+              context,
+              tooltip: 'Align bottom',
+              icon: Icons.align_vertical_bottom,
+              onPressed: () =>
+                  controller.alignSelection(SelectionAlignment.bottom),
+            ),
+          ],
+        ),
+        if (controller.selectedIds.length >= 3) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Distribute',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 4,
+            children: [
+              _arrangeButton(
+                context,
+                tooltip: 'Distribute horizontally',
+                icon: Icons.space_bar,
+                onPressed: () => controller.distributeSelection(
+                  SelectionDistribution.horizontal,
+                ),
+              ),
+              _arrangeButton(
+                context,
+                tooltip: 'Distribute vertically',
+                icon: Icons.swap_vert,
+                onPressed: () => controller.distributeSelection(
+                  SelectionDistribution.vertical,
+                ),
+              ),
+            ],
+          ),
+        ],
         const Divider(height: 26),
         _section(context, 'Content'),
         if (element.type != WebElementType.image &&
@@ -257,10 +347,26 @@ class InspectorPanel extends StatelessWidget {
         _section(context, 'Style'),
         if (element.type != WebElementType.image &&
             element.type != WebElementType.divider) ...[
+          FontPickerField(
+            family: element.fontFamily,
+            path: element.fontPath,
+            onSelected: (family, path) => _update(
+              element.copyWith(
+                fontFamily: family,
+                fontPath: path,
+                clearFontPath: path == null,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           _number(
             'Font size',
             element.fontSize,
-            (value) => _update(element.copyWith(fontSize: math.max(6.0, value).toDouble())),
+            (value) => _update(
+              element.copyWith(
+                fontSize: math.max(6.0, value).toDouble(),
+              ),
+            ),
           ),
           DropdownButtonFormField<int>(
             initialValue: element.fontWeight,
@@ -277,6 +383,30 @@ class InspectorPanel extends StatelessWidget {
               if (value != null) _update(element.copyWith(fontWeight: value));
             },
           ),
+          Row(
+            children: [
+              Expanded(
+                child: _number(
+                  'Letter spacing',
+                  element.letterSpacing,
+                  (value) =>
+                      _update(element.copyWith(letterSpacing: value)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _number(
+                  'Line height',
+                  element.lineHeight,
+                  (value) => _update(
+                    element.copyWith(
+                      lineHeight: value.clamp(.5, 4.0).toDouble(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           DropdownButtonFormField<String>(
             initialValue: element.textAlign,
             decoration: const InputDecoration(labelText: 'Text align'),
@@ -290,26 +420,30 @@ class InspectorPanel extends StatelessWidget {
             },
           ),
         ],
-        _colorField(
-          'Text color',
-          element.foregroundColor,
-          (value) => _update(element.copyWith(foregroundColor: value)),
+        ColorEditorField(
+          label: 'Text color',
+          value: element.foregroundColor,
+          onChanged: (value) {
+            if (value != null) {
+              _update(element.copyWith(foregroundColor: value));
+            }
+          },
         ),
-        _colorField(
-          'Background',
-          element.backgroundColor,
-          (value) => value == null
+        ColorEditorField(
+          label: 'Background',
+          value: element.backgroundColor,
+          allowTransparent: true,
+          onChanged: (value) => value == null
               ? _update(element.copyWith(clearBackgroundColor: true))
               : _update(element.copyWith(backgroundColor: value)),
-          allowTransparent: true,
         ),
-        _colorField(
-          'Border',
-          element.borderColor,
-          (value) => value == null
+        ColorEditorField(
+          label: 'Border',
+          value: element.borderColor,
+          allowTransparent: true,
+          onChanged: (value) => value == null
               ? _update(element.copyWith(clearBorderColor: true))
               : _update(element.copyWith(borderColor: value)),
-          allowTransparent: true,
         ),
         _number(
           'Border width',
@@ -360,6 +494,22 @@ class InspectorPanel extends StatelessWidget {
     );
   }
 
+  Widget _arrangeButton(
+    BuildContext context, {
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton.filledTonal(
+        visualDensity: VisualDensity.compact,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+      ),
+    );
+  }
+
   Widget _section(BuildContext context, String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(text, style: Theme.of(context).textTheme.labelLarge),
@@ -401,28 +551,6 @@ class InspectorPanel extends StatelessWidget {
     );
   }
 
-  Widget _colorField(
-    String label,
-    int? value,
-    ValueChanged<int?> onChanged, {
-    bool allowTransparent = false,
-  }) {
-    return TextFormField(
-      key: ValueKey('$label-$value'),
-      initialValue: value == null ? 'transparent' : _hex(value),
-      decoration: InputDecoration(labelText: label),
-      onFieldSubmitted: (text) {
-        final trimmed = text.trim().toLowerCase();
-        if (allowTransparent && (trimmed.isEmpty || trimmed == 'transparent')) {
-          onChanged(null);
-          return;
-        }
-        final parsed = _parseHex(trimmed);
-        if (parsed != null) onChanged(parsed);
-      },
-    );
-  }
-
   Future<void> _pickImage(WebElement element) async {
     final file = await FilePicker.pickFile(
       type: FileType.image,
@@ -448,13 +576,4 @@ class InspectorPanel extends StatelessWidget {
     return value == rounded ? rounded.toInt().toString() : value.toStringAsFixed(2);
   }
 
-  String _hex(int value) =>
-      '#${(value & 0xffffffff).toRadixString(16).padLeft(8, '0').toUpperCase()}';
-
-  int? _parseHex(String raw) {
-    var value = raw.replaceFirst('#', '');
-    if (value.length == 6) value = 'FF$value';
-    if (value.length != 8) return null;
-    return int.tryParse(value, radix: 16);
-  }
 }

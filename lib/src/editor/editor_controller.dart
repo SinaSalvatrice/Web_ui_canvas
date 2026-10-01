@@ -7,6 +7,20 @@ import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
 
+enum SelectionAlignment {
+  left,
+  horizontalCenter,
+  right,
+  top,
+  verticalCenter,
+  bottom,
+}
+
+enum SelectionDistribution {
+  horizontal,
+  vertical,
+}
+
 class EditorController extends ChangeNotifier {
   EditorController([WebProject? project]) : _project = project ?? WebProject.empty() {
     _history.add(_project);
@@ -356,6 +370,101 @@ class EditorController extends ChangeNotifier {
       commit: true,
     );
     _selectCreated(created);
+  }
+
+  void alignSelection(SelectionAlignment alignment) {
+    final selected = selectedElements;
+    if (selected.isEmpty) return;
+
+    final page = activePage;
+    final targetLeft = selected.length == 1
+        ? 0.0
+        : selected.map((element) => element.x).reduce(math.min);
+    final targetTop = selected.length == 1
+        ? 0.0
+        : selected.map((element) => element.y).reduce(math.min);
+    final targetRight = selected.length == 1
+        ? page.width
+        : selected
+            .map((element) => element.x + element.width)
+            .reduce(math.max);
+    final targetBottom = selected.length == 1
+        ? page.height
+        : selected
+            .map((element) => element.y + element.height)
+            .reduce(math.max);
+    final targetCenterX = (targetLeft + targetRight) / 2;
+    final targetCenterY = (targetTop + targetBottom) / 2;
+
+    final ids = _selectedIds;
+    final elements = page.elements.map((element) {
+      if (!ids.contains(element.id) || element.locked) return element;
+
+      return switch (alignment) {
+        SelectionAlignment.left => element.copyWith(x: targetLeft),
+        SelectionAlignment.horizontalCenter => element.copyWith(
+            x: targetCenterX - element.width / 2,
+          ),
+        SelectionAlignment.right => element.copyWith(
+            x: targetRight - element.width,
+          ),
+        SelectionAlignment.top => element.copyWith(y: targetTop),
+        SelectionAlignment.verticalCenter => element.copyWith(
+            y: targetCenterY - element.height / 2,
+          ),
+        SelectionAlignment.bottom => element.copyWith(
+            y: targetBottom - element.height,
+          ),
+      };
+    }).toList();
+
+    _replacePage(page.copyWith(elements: elements), commit: true);
+  }
+
+  void distributeSelection(SelectionDistribution distribution) {
+    final selected = selectedElements
+        .where((element) => !element.locked)
+        .toList(growable: false);
+    if (selected.length < 3) return;
+
+    final page = activePage;
+    final replacements = <String, WebElement>{};
+
+    switch (distribution) {
+      case SelectionDistribution.horizontal:
+        final sorted = [...selected]..sort((a, b) => a.x.compareTo(b.x));
+        final left = sorted.first.x;
+        final right =
+            sorted.last.x + sorted.last.width;
+        final occupied =
+            sorted.fold<double>(0, (sum, element) => sum + element.width);
+        final gap = (right - left - occupied) / (sorted.length - 1);
+        var cursor = left;
+        for (final element in sorted) {
+          replacements[element.id] = element.copyWith(x: cursor);
+          cursor += element.width + gap;
+        }
+        break;
+      case SelectionDistribution.vertical:
+        final sorted = [...selected]..sort((a, b) => a.y.compareTo(b.y));
+        final top = sorted.first.y;
+        final bottom =
+            sorted.last.y + sorted.last.height;
+        final occupied =
+            sorted.fold<double>(0, (sum, element) => sum + element.height);
+        final gap = (bottom - top - occupied) / (sorted.length - 1);
+        var cursor = top;
+        for (final element in sorted) {
+          replacements[element.id] = element.copyWith(y: cursor);
+          cursor += element.height + gap;
+        }
+        break;
+    }
+
+    final elements = page.elements
+        .map((element) => replacements[element.id] ?? element)
+        .toList();
+    _replacePage(page.copyWith(elements: elements), commit: true);
   }
 
   void moveLayer(int delta) {
