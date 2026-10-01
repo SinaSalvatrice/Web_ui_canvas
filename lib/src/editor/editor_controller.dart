@@ -426,62 +426,101 @@ class EditorController extends ChangeNotifier {
     if (raw == null || raw.parentId == parentId) return;
     if (parentId == id || _descendantIds(id).contains(parentId)) return;
 
-    WebElement? currentResolved;
-    for (final element in resolvedPageElements) {
-      if (element.id == id) {
-        currentResolved = element;
-        break;
-      }
-    }
-    if (currentResolved == null) return;
+    final before = <WebBreakpoint, Map<String, WebElement>>{
+      for (final breakpoint in WebBreakpoint.values)
+        breakpoint: {
+          for (final element
+              in PageLayoutEngine.resolvePage(activePage, breakpoint))
+            element.id: element,
+        },
+    };
+
+    final desktopCurrent = before[WebBreakpoint.desktop]![id];
+    if (desktopCurrent == null) return;
 
     if (parentId == null) {
+      final overrides =
+          Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+        raw.responsiveOverrides,
+      );
+      for (final breakpoint in [
+        WebBreakpoint.tablet,
+        WebBreakpoint.mobile,
+      ]) {
+        final current = before[breakpoint]![id];
+        if (current == null) continue;
+        final existing =
+            overrides[breakpoint] ?? const WebElementBreakpointOverride();
+        overrides[breakpoint] = existing.copyWith(
+          x: current.x,
+          y: current.y,
+          width: current.width,
+          height: current.height,
+        );
+      }
+
       updateElement(
         raw.copyWith(
           clearParentId: true,
-          x: currentResolved.x,
-          y: currentResolved.y,
-          width: currentResolved.width,
-          height: currentResolved.height,
+          x: desktopCurrent.x,
+          y: desktopCurrent.y,
+          width: desktopCurrent.width,
+          height: desktopCurrent.height,
+          responsiveOverrides: overrides,
         ),
       );
       return;
     }
 
     final parentRaw = _elementById(parentId);
-    WebElement? parentResolved;
-    for (final element in resolvedPageElements) {
-      if (element.id == parentId) {
-        parentResolved = element;
-        break;
-      }
-    }
-    if (parentRaw == null ||
-        parentResolved == null ||
-        !parentRaw.canContainChildren) {
-      return;
-    }
+    if (parentRaw == null || !parentRaw.canContainChildren) return;
+    final desktopParent = before[WebBreakpoint.desktop]![parentId];
+    if (desktopParent == null) return;
 
-    final localX = currentResolved.x -
-        parentResolved.x -
-        parentRaw.paddingLeft -
-        raw.marginLeft;
-    final localY = currentResolved.y -
-        parentResolved.y -
-        parentRaw.paddingTop -
-        raw.marginTop;
+    final overrides =
+        Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+      raw.responsiveOverrides,
+    );
+    for (final breakpoint in [
+      WebBreakpoint.tablet,
+      WebBreakpoint.mobile,
+    ]) {
+      final current = before[breakpoint]![id];
+      final parent = before[breakpoint]![parentId];
+      if (current == null || parent == null) continue;
+      final existing =
+          overrides[breakpoint] ?? const WebElementBreakpointOverride();
+      overrides[breakpoint] = existing.copyWith(
+        x: current.x -
+            parent.x -
+            parentRaw.paddingLeft -
+            raw.marginLeft,
+        y: current.y -
+            parent.y -
+            parentRaw.paddingTop -
+            raw.marginTop,
+        width: current.width,
+        height: current.height,
+      );
+    }
 
     updateElement(
       raw.copyWith(
         parentId: parentId,
-        x: localX,
-        y: localY,
-        width: currentResolved.width,
-        height: currentResolved.height,
+        x: desktopCurrent.x -
+            desktopParent.x -
+            parentRaw.paddingLeft -
+            raw.marginLeft,
+        y: desktopCurrent.y -
+            desktopParent.y -
+            parentRaw.paddingTop -
+            raw.marginTop,
+        width: desktopCurrent.width,
+        height: desktopCurrent.height,
+        responsiveOverrides: overrides,
       ),
     );
   }
-
   Set<String> _descendantIds(String id) {
     final result = <String>{};
     void collect(String parentId) {
