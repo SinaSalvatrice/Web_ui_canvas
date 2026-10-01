@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../export/html_exporter.dart';
 import '../services/project_storage.dart';
@@ -18,7 +19,7 @@ class EditorPage extends StatefulWidget {
   State<EditorPage> createState() => _EditorPageState();
 }
 
-class _EditorPageState extends State<EditorPage> {
+class _EditorPageState extends State<EditorPage> with WindowListener {
   final EditorController _controller = EditorController();
   final ProjectStorage _storage = const ProjectStorage();
   final HtmlExporter _exporter = const HtmlExporter();
@@ -26,12 +27,24 @@ class _EditorPageState extends State<EditorPage> {
   final FocusNode _shortcuts = FocusNode(debugLabel: 'web-ui-canvas-shortcuts');
 
   String? _projectPath;
+  late String _cleanFingerprint;
   bool _previewMode = false;
   bool _busy = false;
+  bool _handlingWindowClose = false;
   int _rightTab = 0;
+
+  bool get _isDirty => _controller.projectFingerprint != _cleanFingerprint;
+
+  @override
+  void initState() {
+    super.initState();
+    _cleanFingerprint = _controller.projectFingerprint;
+    windowManager.addListener(this);
+  }
 
   @override
   void dispose() {
+    windowManager.removeListener(this);
     _controller.dispose();
     _viewportController.dispose();
     _shortcuts.dispose();
@@ -228,9 +241,9 @@ class _EditorPageState extends State<EditorPage> {
             ),
             const Spacer(),
             Text(
-              _projectPath == null
-                  ? _controller.project.name
-                  : _projectPath!.split(RegExp(r'[\\/]')).last,
+              _isDirty
+                  ? '${_projectLabel()} *'
+                  : _projectLabel(),
             ),
             const SizedBox(width: 14),
             FilterChip(
@@ -408,12 +421,19 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> _open() async {
     if (_busy) return;
+    if (!await _resolveUnsavedChanges()) return;
+    if (!mounted) return;
+
     setState(() => _busy = true);
     try {
       final loaded = await _storage.openProject();
       if (loaded == null) return;
       _controller.replaceProject(loaded.$1);
-      setState(() => _projectPath = loaded.$2);
+      if (!mounted) return;
+      setState(() {
+        _projectPath = loaded.$2;
+        _cleanFingerprint = _controller.projectFingerprint;
+      });
     } catch (error) {
       _showError(error);
     } finally {
@@ -422,18 +442,92 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   Future<void> _save() async {
-    if (_busy) return;
+    await _saveInternal();
+  }
+
+  Future<bool> _saveInternal() async {
+    if (_busy) return false;
     setState(() => _busy = true);
     try {
       final path = await _storage.saveProject(
         _controller.project,
         existingPath: _projectPath,
       );
-      if (path != null && mounted) setState(() => _projectPath = path);
+      if (path == null) return false;
+      if (!mounted) return false;
+      setState(() {
+        _projectPath = path;
+        _cleanFingerprint = _controller.projectFingerprint;
+      });
+      return true;
     } catch (error) {
       _showError(error);
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _projectLabel() => _projectPath == null
+      ? _controller.project.name
+      : _projectPath!.split(RegExp(r'[\\/]')).last;
+
+  Future<bool> _resolveUnsavedChanges() async {
+    if (!_isDirty) return true;
+
+    final action = await showDialog<_UnsavedAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Unsaved changes'),
+        content: const Text(
+          'The project has changes that have not been saved yet.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_UnsavedAction.cancel),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_UnsavedAction.discard),
+            child: const Text('Discard'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_UnsavedAction.save),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    switch (action) {
+      case _UnsavedAction.save:
+        return _saveInternal();
+      case _UnsavedAction.discard:
+        return true;
+      case _UnsavedAction.cancel:
+      case null:
+        return false;
+    }
+  }
+
+  @override
+  void onWindowClose() {
+    unawaited(_handleWindowClose());
+  }
+
+  Future<void> _handleWindowClose() async {
+    if (_handlingWindowClose) return;
+    _handlingWindowClose = true;
+    try {
+      if (await _resolveUnsavedChanges()) {
+        await windowManager.destroy();
+      }
+    } finally {
+      _handlingWindowClose = false;
     }
   }
 
@@ -460,4 +554,11 @@ class _EditorPageState extends State<EditorPage> {
       SnackBar(content: Text(error.toString())),
     );
   }
+}
+
+
+enum _UnsavedAction {
+  save,
+  discard,
+  cancel,
 }

@@ -26,6 +26,7 @@ class EditorController extends ChangeNotifier {
   double gridStep = 16;
 
   WebProject get project => _project;
+  String get projectFingerprint => jsonEncode(_project.toJson());
   String? get selectedId => _selectedId;
   Set<String> get selectedIds => Set.unmodifiable(_selectedIds);
   bool get hasSelection => _selectedIds.isNotEmpty;
