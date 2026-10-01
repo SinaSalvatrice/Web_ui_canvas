@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: flutter-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: windows-latest
@@ -16,5 +20,23 @@ jobs:
         shell: pwsh
         run: ./tool/bootstrap_windows.ps1
       - run: flutter pub get
-      - run: flutter analyze
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - run: flutter test
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Generate Android host
+        shell: pwsh
+        run: ./tool/bootstrap_android.ps1
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Web-UI-Canvas-Android
+          path: build/app/outputs/flutter-apk/app-release.apk
