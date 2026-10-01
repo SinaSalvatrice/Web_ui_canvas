@@ -43,10 +43,7 @@ class EditorController extends ChangeNotifier {
   void replaceProject(WebProject project) {
     _project = project;
     _selectedId = null;
-    _nextId = _project.pages
-            .expand((page) => page.elements)
-            .length +
-        1;
+    _nextId = _project.pages.expand((page) => page.elements).length + 1;
     _history
       ..clear()
       ..add(project);
@@ -66,11 +63,13 @@ class EditorController extends ChangeNotifier {
 
   void addElement(WebElementType type, {double? x, double? y}) {
     final page = activePage;
+    final defaultX =
+        math.max(24.0, (page.width - type.defaultWidth) / 2).toDouble();
     final element = WebElement.fresh(
       id: 'element_${_nextId++}',
       type: type,
-      x: snap(x ?? math.max(24, (page.width - type.defaultWidth) / 2)),
-      y: snap(y ?? 80 + page.elements.length * 28),
+      x: snap(x ?? defaultX),
+      y: snap(y ?? 80.0 + page.elements.length * 28.0),
     );
     _replacePage(
       page.copyWith(elements: [...page.elements, element]),
@@ -123,28 +122,28 @@ class EditorController extends ChangeNotifier {
     var shiftY = 0.0;
 
     if (left) {
-      final next = math.max(32, width - localDx);
+      final next = math.max(32.0, width - localDx).toDouble();
       shiftX = (width - next) / 2;
       width = next;
     } else if (right) {
-      final next = math.max(32, width + localDx);
+      final next = math.max(32.0, width + localDx).toDouble();
       shiftX = (next - width) / 2;
       width = next;
     }
 
     if (top) {
-      final next = math.max(24, height - localDy);
+      final next = math.max(24.0, height - localDy).toDouble();
       shiftY = (height - next) / 2;
       height = next;
     } else if (bottom) {
-      final next = math.max(24, height + localDy);
+      final next = math.max(24.0, height + localDy).toDouble();
       shiftY = (next - height) / 2;
       height = next;
     }
 
     if (snapEnabled) {
-      width = math.max(32, snap(width));
-      height = math.max(24, snap(height));
+      width = math.max(32.0, snap(width)).toDouble();
+      height = math.max(24.0, snap(height)).toDouble();
     }
 
     final screenShiftX = shiftX * c - shiftY * s;
@@ -183,8 +182,10 @@ class EditorController extends ChangeNotifier {
   void duplicateSelected() {
     final source = selectedElement;
     if (source == null) return;
-    final duplicate = WebElement.fromJson(source.toJson())
-        .copyWith(x: source.x + 24, y: source.y + 24);
+    final duplicate = WebElement.fromJson(source.toJson()).copyWith(
+      x: source.x + 24,
+      y: source.y + 24,
+    );
     final json = duplicate.toJson();
     json['id'] = 'element_${_nextId++}';
     final next = WebElement.fromJson(json);
@@ -204,7 +205,7 @@ class EditorController extends ChangeNotifier {
     final elements = [...page.elements];
     final index = elements.indexWhere((element) => element.id == id);
     if (index < 0) return;
-    final target = (index + delta).clamp(0, elements.length - 1);
+    final target = (index + delta).clamp(0, elements.length - 1).toInt();
     if (target == index) return;
     final item = elements.removeAt(index);
     elements.insert(target, item);
@@ -214,8 +215,8 @@ class EditorController extends ChangeNotifier {
   void setPageSize(double width, double height) {
     _replacePage(
       activePage.copyWith(
-        width: width.clamp(320, 4000),
-        height: height.clamp(320, 12000),
+        width: width.clamp(320.0, 4000.0).toDouble(),
+        height: height.clamp(320.0, 12000.0).toDouble(),
       ),
       commit: true,
     );
