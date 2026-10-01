@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
+import '../model/layout.dart';
+import '../model/page_layout_engine.dart';
 import '../model/responsive.dart';
 import '../model/responsive_layout.dart';
 
@@ -73,14 +75,24 @@ class EditorController extends ChangeNotifier {
       .where((element) => _selectedIds.contains(element.id))
       .toList(growable: false);
 
+  List<WebElement> get resolvedPageElements =>
+      PageLayoutEngine.resolvePage(activePage, _activeBreakpoint);
+
   WebElement? get resolvedSelectedElement {
-    final element = selectedElement;
-    return element == null ? null : resolveElement(element);
+    final id = _selectedId;
+    if (id == null) return null;
+    for (final element in resolvedPageElements) {
+      if (element.id == id) return element;
+    }
+    return null;
   }
 
-  List<WebElement> get resolvedSelectedElements => selectedElements
-      .map(resolveElement)
-      .toList(growable: false);
+  List<WebElement> get resolvedSelectedElements {
+    final ids = _selectedIds;
+    return resolvedPageElements
+        .where((element) => ids.contains(element.id))
+        .toList(growable: false);
+  }
 
   void replaceProject(WebProject project) {
     _project = project;
@@ -391,6 +403,151 @@ class EditorController extends ChangeNotifier {
     );
   }
 
+  bool isAutoLayoutManaged(String id) {
+    final element = _elementById(id);
+    final parentId = element?.parentId;
+    if (parentId == null) return false;
+    final parent = _elementById(parentId);
+    return parent != null && parent.layoutMode != WebLayoutMode.free;
+  }
+
+  List<WebElement> parentCandidatesFor(String id) {
+    final blocked = <String>{id, ..._descendantIds(id)};
+    return activePage.elements
+        .where(
+          (element) =>
+              element.canContainChildren && !blocked.contains(element.id),
+        )
+        .toList(growable: false);
+  }
+
+  void setParent(String id, String? parentId) {
+    final raw = _elementById(id);
+    if (raw == null || raw.parentId == parentId) return;
+    if (parentId == id || _descendantIds(id).contains(parentId)) return;
+
+    WebElement? currentResolved;
+    for (final element in resolvedPageElements) {
+      if (element.id == id) {
+        currentResolved = element;
+        break;
+      }
+    }
+    if (currentResolved == null) return;
+
+    if (parentId == null) {
+      updateElement(
+        raw.copyWith(
+          clearParentId: true,
+          x: currentResolved.x,
+          y: currentResolved.y,
+          width: currentResolved.width,
+          height: currentResolved.height,
+        ),
+      );
+      return;
+    }
+
+    final parentRaw = _elementById(parentId);
+    WebElement? parentResolved;
+    for (final element in resolvedPageElements) {
+      if (element.id == parentId) {
+        parentResolved = element;
+        break;
+      }
+    }
+    if (parentRaw == null ||
+        parentResolved == null ||
+        !parentRaw.canContainChildren) {
+      return;
+    }
+
+    final localX = currentResolved.x -
+        parentResolved.x -
+        parentRaw.paddingLeft -
+        raw.marginLeft;
+    final localY = currentResolved.y -
+        parentResolved.y -
+        parentRaw.paddingTop -
+        raw.marginTop;
+
+    updateElement(
+      raw.copyWith(
+        parentId: parentId,
+        x: localX,
+        y: localY,
+        width: currentResolved.width,
+        height: currentResolved.height,
+      ),
+    );
+  }
+
+  Set<String> _descendantIds(String id) {
+    final result = <String>{};
+    void collect(String parentId) {
+      for (final element in activePage.elements) {
+        if (element.parentId == parentId && result.add(element.id)) {
+          collect(element.id);
+        }
+      }
+    }
+
+    collect(id);
+    return result;
+  }
+
+  void setLayoutMode(String id, WebLayoutMode mode) {
+    final raw = _elementById(id);
+    if (raw == null || !raw.canContainChildren) return;
+    updateElement(raw.copyWith(layoutMode: mode));
+  }
+
+  void updateContainerLayout(
+    String id, {
+    double? gap,
+    double? paddingTop,
+    double? paddingRight,
+    double? paddingBottom,
+    double? paddingLeft,
+    int? gridColumns,
+    WebMainAlignment? mainAlignment,
+    WebCrossAlignment? crossAlignment,
+  }) {
+    final raw = _elementById(id);
+    if (raw == null || !raw.canContainChildren) return;
+    updateElement(
+      raw.copyWith(
+        gap: gap,
+        paddingTop: paddingTop,
+        paddingRight: paddingRight,
+        paddingBottom: paddingBottom,
+        paddingLeft: paddingLeft,
+        gridColumns: gridColumns,
+        mainAlignment: mainAlignment,
+        crossAlignment: crossAlignment,
+      ),
+    );
+  }
+
+  void updateMargins(
+    String id, {
+    double? top,
+    double? right,
+    double? bottom,
+    double? left,
+  }) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    updateElement(
+      raw.copyWith(
+        marginTop: top,
+        marginRight: right,
+        marginBottom: bottom,
+        marginLeft: left,
+      ),
+    );
+  }
+
   void select(String? id) => selectOnly(id);
 
   void selectOnly(String? id) {
@@ -551,7 +708,7 @@ class EditorController extends ChangeNotifier {
 
   void moveBy(String id, double dx, double dy) {
     final anchorRaw = _elementById(id);
-    if (anchorRaw == null || anchorRaw.locked) return;
+    if (anchorRaw == null || anchorRaw.locked || isAutoLayoutManaged(id)) return;
     if (!_selectedIds.contains(id)) {
       _selectedIds
         ..clear()
@@ -568,7 +725,11 @@ class EditorController extends ChangeNotifier {
 
     final page = activePage;
     final elements = page.elements.map((raw) {
-      if (!_selectedIds.contains(raw.id) || raw.locked) return raw;
+      if (!_selectedIds.contains(raw.id) ||
+          raw.locked ||
+          isAutoLayoutManaged(raw.id)) {
+        return raw;
+      }
       final resolved = resolveElement(raw);
       return _withResolvedGeometry(
         raw,
@@ -609,7 +770,10 @@ class EditorController extends ChangeNotifier {
   }) {
     final raw = _elementById(id);
     if (raw == null || raw.locked) return;
-    final element = resolveElement(raw);
+    final element = resolvedPageElements.firstWhere(
+      (candidate) => candidate.id == id,
+      orElse: () => resolveElement(raw),
+    );
 
     final c = math.cos(element.rotation);
     final s = math.sin(element.rotation);
@@ -651,8 +815,8 @@ class EditorController extends ChangeNotifier {
 
     _writeResolvedGeometry(
       raw,
-      x: element.x + screenShiftX,
-      y: element.y + screenShiftY,
+      x: isAutoLayoutManaged(id) ? element.x : element.x + screenShiftX,
+      y: isAutoLayoutManaged(id) ? element.y : element.y + screenShiftY,
       width: width,
       height: height,
       commit: false,
