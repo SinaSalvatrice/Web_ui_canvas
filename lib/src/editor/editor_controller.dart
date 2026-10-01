@@ -20,6 +20,7 @@ class EditorController extends ChangeNotifier {
   final Set<String> _selectedIds = <String>{};
   List<WebElement> _clipboard = const <WebElement>[];
   int _pasteGeneration = 0;
+  String? _cropElementId;
 
   bool gridEnabled = true;
   bool snapEnabled = false;
@@ -31,6 +32,8 @@ class EditorController extends ChangeNotifier {
   Set<String> get selectedIds => Set.unmodifiable(_selectedIds);
   bool get hasSelection => _selectedIds.isNotEmpty;
   bool get canPaste => _clipboard.isNotEmpty;
+  String? get cropElementId => _cropElementId;
+  bool get isCropMode => _cropElementId != null;
   bool get canUndo => _historyIndex > 0;
   bool get canRedo => _historyIndex < _history.length - 1;
 
@@ -51,6 +54,7 @@ class EditorController extends ChangeNotifier {
   void replaceProject(WebProject project) {
     _project = project;
     _clearSelectionState();
+    _cropElementId = null;
     _clipboard = const <WebElement>[];
     _pasteGeneration = 0;
     _nextId = _project.pages.expand((page) => page.elements).length + 1;
@@ -71,12 +75,14 @@ class EditorController extends ChangeNotifier {
       _selectedIds.add(id);
       _selectedId = id;
     }
+    if (_cropElementId != id) _cropElementId = null;
     notifyListeners();
   }
 
   void toggleSelection(String id) {
     if (!activePage.elements.any((element) => element.id == id)) return;
     if (_selectedIds.remove(id)) {
+      if (_cropElementId == id) _cropElementId = null;
       if (_selectedId == id) {
         _selectedId = _selectedIds.isEmpty ? null : _selectedIds.last;
       }
@@ -98,7 +104,68 @@ class EditorController extends ChangeNotifier {
   void clearSelection() {
     if (_selectedIds.isEmpty && _selectedId == null) return;
     _clearSelectionState();
+    _cropElementId = null;
     notifyListeners();
+  }
+
+  bool isCropping(String id) => _cropElementId == id;
+
+  void enterCropMode(String id) {
+    final element = _elementById(id);
+    if (element == null || element.type != WebElementType.image || element.locked) {
+      return;
+    }
+    _selectedIds
+      ..clear()
+      ..add(id);
+    _selectedId = id;
+    _cropElementId = id;
+    notifyListeners();
+  }
+
+  void exitCropMode() {
+    if (_cropElementId == null) return;
+    _cropElementId = null;
+    notifyListeners();
+  }
+
+  void panImage(String id, double dx, double dy) {
+    final element = _elementById(id);
+    if (element == null ||
+        element.type != WebElementType.image ||
+        element.locked ||
+        element.width <= 0 ||
+        element.height <= 0) {
+      return;
+    }
+    final scale = math.max(.25, element.imageScale);
+    final nextX =
+        (element.imagePositionX - (dx * 2 / (element.width * scale)))
+            .clamp(-1.0, 1.0)
+            .toDouble();
+    final nextY =
+        (element.imagePositionY - (dy * 2 / (element.height * scale)))
+            .clamp(-1.0, 1.0)
+            .toDouble();
+    updateElement(
+      element.copyWith(
+        imagePositionX: nextX,
+        imagePositionY: nextY,
+      ),
+      commit: false,
+    );
+  }
+
+  void resetImageCrop(String id) {
+    final element = _elementById(id);
+    if (element == null || element.type != WebElementType.image) return;
+    updateElement(
+      element.copyWith(
+        imagePositionX: 0,
+        imagePositionY: 0,
+        imageScale: 1,
+      ),
+    );
   }
 
   double snap(double value) {
@@ -250,6 +317,7 @@ class EditorController extends ChangeNotifier {
       commit: true,
     );
     _clearSelectionState();
+    _cropElementId = null;
     notifyListeners();
   }
 
@@ -413,6 +481,9 @@ class EditorController extends ChangeNotifier {
   void _ensureSelectionExists() {
     final validIds = activePage.elements.map((element) => element.id).toSet();
     _selectedIds.removeWhere((id) => !validIds.contains(id));
+    if (_cropElementId != null && !validIds.contains(_cropElementId)) {
+      _cropElementId = null;
+    }
     if (_selectedId != null && !_selectedIds.contains(_selectedId)) {
       _selectedId = _selectedIds.isEmpty ? null : _selectedIds.last;
     }
