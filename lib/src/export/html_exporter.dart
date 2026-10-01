@@ -173,6 +173,23 @@ $body
     };
   }
 
+  String buildHtmlForPage(
+    WebPage page, {
+    Map<String, String> assets = const {},
+    String title = 'Test',
+  }) =>
+      _html(
+        WebProject(
+          schemaVersion: WebProject.currentSchemaVersion,
+          id: 'test',
+          name: title,
+          activePageId: page.id,
+          pages: [page],
+        ),
+        page,
+        assets,
+      );
+
   String buildCssForPage(
     WebPage page, {
     Map<String, String> assets = const {},
