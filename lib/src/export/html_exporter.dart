@@ -127,6 +127,12 @@ $body
     };
   }
 
+  String buildCssForPage(
+    WebPage page, {
+    Map<String, String> assets = const {},
+  }) =>
+      _css(page, assets);
+
   String _css(WebPage page, Map<String, String> assets) {
     final buffer = StringBuffer();
 
