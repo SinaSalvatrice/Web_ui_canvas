@@ -108,7 +108,7 @@ $body
     final text = _escape(element.text);
     return switch (element.type) {
       WebElementType.image =>
-        '<img id="$id" class="webui-element" src="${_escapeAttribute(assets[element.imagePath] ?? '')}" alt="">',
+        '<div id="$id" class="webui-element webui-image-frame"><img class="webui-image-content" src="${_escapeAttribute(assets[element.imagePath] ?? '')}" alt=""></div>',
       WebElementType.button => element.href.trim().isNotEmpty
           ? '<a id="$id" class="webui-element" href="${_escapeAttribute(element.href)}">$text</a>'
           : '<button id="$id" class="webui-element" type="button">$text</button>',
@@ -159,13 +159,25 @@ $body
           '  border: ${element.borderWidth}px solid ${element.borderColor == null ? 'transparent' : _color(element.borderColor!)};',
         );
       if (element.type == WebElementType.image) {
+        buffer.writeln('  overflow: hidden;');
+      }
+      buffer.writeln('}');
+      if (element.type == WebElementType.image) {
         buffer
+          ..writeln('#${element.id} > .webui-image-content {')
+          ..writeln('  display: block;')
+          ..writeln('  width: 100%;')
+          ..writeln('  height: 100%;')
           ..writeln('  object-fit: ${element.imageFit};')
           ..writeln(
             '  object-position: ${50 + element.imagePositionX * 50}% ${50 + element.imagePositionY * 50}%;',
-          );
+          )
+          ..writeln(
+            '  transform: scale(${element.imageScale.clamp(.25, 5.0)});',
+          )
+          ..writeln('  transform-origin: center;')
+          ..writeln('}');
       }
-      buffer.writeln('}');
     }
 
     return buffer.toString();
