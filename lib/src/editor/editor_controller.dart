@@ -270,6 +270,32 @@ class EditorController extends ChangeNotifier {
     updateElement(element.copyWith(responsiveOverrides: map));
   }
 
+  void setAnchorX(String id, String value) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(raw.copyWith(anchorX: value));
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(anchorX: value),
+    );
+  }
+
+  void setAnchorY(String id, String value) {
+    final raw = _elementById(id);
+    if (raw == null) return;
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      updateElement(raw.copyWith(anchorY: value));
+      return;
+    }
+    _updateBreakpointOverride(
+      raw,
+      (override) => override.copyWith(anchorY: value),
+    );
+  }
+
   void setWidthMode(String id, WebSizeMode mode) {
     final raw = _elementById(id);
     if (raw == null) return;
