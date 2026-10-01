@@ -422,6 +422,7 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
   Future<void> _open() async {
     if (_busy) return;
     if (!await _resolveUnsavedChanges()) return;
+    if (!mounted) return;
 
     setState(() => _busy = true);
     try {
