@@ -447,6 +447,36 @@ class EditorController extends ChangeNotifier {
     );
   }
 
+  WebElement _withResolvedGeometry(
+    WebElement raw, {
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+  }) {
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      return raw.copyWith(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+      );
+    }
+
+    final map = Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+      raw.responsiveOverrides,
+    );
+    final current =
+        map[_activeBreakpoint] ?? const WebElementBreakpointOverride();
+    map[_activeBreakpoint] = current.copyWith(
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+    );
+    return raw.copyWith(responsiveOverrides: map);
+  }
+
   void _updateBreakpointOverride(
     WebElement raw,
     WebElementBreakpointOverride Function(
@@ -610,8 +640,8 @@ class EditorController extends ChangeNotifier {
   }
 
   void moveBy(String id, double dx, double dy) {
-    final anchor = _elementById(id);
-    if (anchor == null || anchor.locked) return;
+    final anchorRaw = _elementById(id);
+    if (anchorRaw == null || anchorRaw.locked) return;
     if (!_selectedIds.contains(id)) {
       _selectedIds
         ..clear()
@@ -619,6 +649,7 @@ class EditorController extends ChangeNotifier {
       _selectedId = id;
     }
 
+    final anchor = resolveElement(anchorRaw);
     final nextX = snap(anchor.x + dx);
     final nextY = snap(anchor.y + dy);
     final effectiveDx = nextX - anchor.x;
@@ -626,12 +657,15 @@ class EditorController extends ChangeNotifier {
     if (effectiveDx == 0 && effectiveDy == 0) return;
 
     final page = activePage;
-    final movingIds = _selectedIds;
-    final elements = page.elements.map((element) {
-      if (!movingIds.contains(element.id) || element.locked) return element;
-      return element.copyWith(
-        x: element.x + effectiveDx,
-        y: element.y + effectiveDy,
+    final elements = page.elements.map((raw) {
+      if (!_selectedIds.contains(raw.id) || raw.locked) return raw;
+      final resolved = resolveElement(raw);
+      return _withResolvedGeometry(
+        raw,
+        x: resolved.x + effectiveDx,
+        y: resolved.y + effectiveDy,
+        width: resolved.width,
+        height: resolved.height,
       );
     }).toList();
     _replacePage(page.copyWith(elements: elements), commit: false);
@@ -640,9 +674,16 @@ class EditorController extends ChangeNotifier {
   void nudgeSelection(double dx, double dy) {
     if (_selectedIds.isEmpty) return;
     final page = activePage;
-    final elements = page.elements.map((element) {
-      if (!_selectedIds.contains(element.id) || element.locked) return element;
-      return element.copyWith(x: element.x + dx, y: element.y + dy);
+    final elements = page.elements.map((raw) {
+      if (!_selectedIds.contains(raw.id) || raw.locked) return raw;
+      final resolved = resolveElement(raw);
+      return _withResolvedGeometry(
+        raw,
+        x: resolved.x + dx,
+        y: resolved.y + dy,
+        width: resolved.width,
+        height: resolved.height,
+      );
     }).toList();
     _replacePage(page.copyWith(elements: elements), commit: true);
   }
@@ -656,8 +697,9 @@ class EditorController extends ChangeNotifier {
     required bool top,
     required bool bottom,
   }) {
-    final element = _elementById(id);
-    if (element == null || element.locked) return;
+    final raw = _elementById(id);
+    if (raw == null || raw.locked) return;
+    final element = resolveElement(raw);
 
     final c = math.cos(element.rotation);
     final s = math.sin(element.rotation);
@@ -697,13 +739,12 @@ class EditorController extends ChangeNotifier {
     final screenShiftX = shiftX * c - shiftY * s;
     final screenShiftY = shiftX * s + shiftY * c;
 
-    updateElement(
-      element.copyWith(
-        x: element.x + screenShiftX,
-        y: element.y + screenShiftY,
-        width: width,
-        height: height,
-      ),
+    _writeResolvedGeometry(
+      raw,
+      x: element.x + screenShiftX,
+      y: element.y + screenShiftY,
+      width: width,
+      height: height,
       commit: false,
     );
   }
@@ -766,7 +807,7 @@ class EditorController extends ChangeNotifier {
   }
 
   void alignSelection(SelectionAlignment alignment) {
-    final selected = selectedElements;
+    final selected = resolvedSelectedElements;
     if (selected.isEmpty) return;
 
     final page = activePage;
@@ -790,10 +831,11 @@ class EditorController extends ChangeNotifier {
     final targetCenterY = (targetTop + targetBottom) / 2;
 
     final ids = _selectedIds;
-    final elements = page.elements.map((element) {
-      if (!ids.contains(element.id) || element.locked) return element;
+    final elements = page.elements.map((raw) {
+      if (!ids.contains(raw.id) || raw.locked) return raw;
+      final element = resolveElement(raw);
 
-      return switch (alignment) {
+      final next = switch (alignment) {
         SelectionAlignment.left => element.copyWith(x: targetLeft),
         SelectionAlignment.horizontalCenter => element.copyWith(
             x: targetCenterX - element.width / 2,
@@ -809,13 +851,20 @@ class EditorController extends ChangeNotifier {
             y: targetBottom - element.height,
           ),
       };
+      return _withResolvedGeometry(
+        raw,
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+      );
     }).toList();
 
     _replacePage(page.copyWith(elements: elements), commit: true);
   }
 
   void distributeSelection(SelectionDistribution distribution) {
-    final selected = selectedElements
+    final selected = resolvedSelectedElements
         .where((element) => !element.locked)
         .toList(growable: false);
     if (selected.length < 3) return;
@@ -854,9 +903,17 @@ class EditorController extends ChangeNotifier {
         break;
     }
 
-    final elements = page.elements
-        .map((element) => replacements[element.id] ?? element)
-        .toList();
+    final elements = page.elements.map((raw) {
+      final next = replacements[raw.id];
+      if (next == null) return raw;
+      return _withResolvedGeometry(
+        raw,
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+      );
+    }).toList();
     _replacePage(page.copyWith(elements: elements), commit: true);
   }
 
