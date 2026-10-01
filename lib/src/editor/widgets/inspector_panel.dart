@@ -77,7 +77,7 @@ class InspectorPanel extends StatelessWidget {
               child: _number(
                 'Width',
                 element.width,
-                (value) => _update(element.copyWith(width: math.max(32, value))),
+                (value) => _update(element.copyWith(width: math.max(32.0, value).toDouble())),
               ),
             ),
             const SizedBox(width: 8),
@@ -85,7 +85,7 @@ class InspectorPanel extends StatelessWidget {
               child: _number(
                 'Height',
                 element.height,
-                (value) => _update(element.copyWith(height: math.max(24, value))),
+                (value) => _update(element.copyWith(height: math.max(24.0, value).toDouble())),
               ),
             ),
           ],
@@ -99,7 +99,7 @@ class InspectorPanel extends StatelessWidget {
           'Opacity %',
           element.opacity * 100,
           (value) => _update(
-            element.copyWith(opacity: (value / 100).clamp(0, 1)),
+            element.copyWith(opacity: (value / 100).clamp(0.0, 1.0).toDouble()),
           ),
         ),
         const Divider(height: 26),
@@ -126,7 +126,7 @@ class InspectorPanel extends StatelessWidget {
             label: const Text('Choose image'),
           ),
           DropdownButtonFormField<String>(
-            value: element.imageFit,
+            initialValue: element.imageFit,
             decoration: const InputDecoration(labelText: 'Image fit'),
             items: const [
               DropdownMenuItem(value: 'cover', child: Text('Cover')),
@@ -155,10 +155,10 @@ class InspectorPanel extends StatelessWidget {
           _number(
             'Font size',
             element.fontSize,
-            (value) => _update(element.copyWith(fontSize: math.max(6, value))),
+            (value) => _update(element.copyWith(fontSize: math.max(6.0, value).toDouble())),
           ),
           DropdownButtonFormField<int>(
-            value: element.fontWeight,
+            initialValue: element.fontWeight,
             decoration: const InputDecoration(labelText: 'Font weight'),
             items: const [300, 400, 500, 600, 700, 800, 900]
                 .map(
@@ -173,7 +173,7 @@ class InspectorPanel extends StatelessWidget {
             },
           ),
           DropdownButtonFormField<String>(
-            value: element.textAlign,
+            initialValue: element.textAlign,
             decoration: const InputDecoration(labelText: 'Text align'),
             items: const [
               DropdownMenuItem(value: 'left', child: Text('Left')),
@@ -209,12 +209,12 @@ class InspectorPanel extends StatelessWidget {
         _number(
           'Border width',
           element.borderWidth,
-          (value) => _update(element.copyWith(borderWidth: math.max(0, value))),
+          (value) => _update(element.copyWith(borderWidth: math.max(0.0, value).toDouble())),
         ),
         _number(
           'Corner radius',
           element.borderRadius,
-          (value) => _update(element.copyWith(borderRadius: math.max(0, value))),
+          (value) => _update(element.copyWith(borderRadius: math.max(0.0, value).toDouble())),
         ),
         const Divider(height: 26),
         _section(context, 'Anchors'),
@@ -222,7 +222,7 @@ class InspectorPanel extends StatelessWidget {
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: element.anchorX,
+                initialValue: element.anchorX,
                 decoration: const InputDecoration(labelText: 'Horizontal'),
                 items: const [
                   DropdownMenuItem(value: 'left', child: Text('Left')),
@@ -237,7 +237,7 @@ class InspectorPanel extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: element.anchorY,
+                initialValue: element.anchorY,
                 decoration: const InputDecoration(labelText: 'Vertical'),
                 items: const [
                   DropdownMenuItem(value: 'top', child: Text('Top')),
