@@ -728,12 +728,12 @@ class EditorController extends ChangeNotifier {
         ? 0.0
         : selected.map((element) => element.y).reduce(math.min);
     final targetRight = selected.length == 1
-        ? page.width
+        ? viewportWidth
         : selected
             .map((element) => element.x + element.width)
             .reduce(math.max);
     final targetBottom = selected.length == 1
-        ? page.height
+        ? viewportHeight
         : selected
             .map((element) => element.y + element.height)
             .reduce(math.max);
