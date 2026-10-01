@@ -215,6 +215,30 @@ void main() {
     expect(parent.parentId, isNull);
   });
 
+  test('deleting a parent detaches surviving children without a jump', () {
+    final controller = EditorController();
+    controller.addElement(WebElementType.container, x: 100, y: 100);
+    final parentId = controller.selectedId!;
+    controller.addElement(WebElementType.button, x: 420, y: 520);
+    final childId = controller.selectedId!;
+
+    controller.setParent(childId, parentId);
+    controller.selectOnly(childId);
+    final before = controller.resolvedSelectedElement!;
+
+    controller.selectOnly(parentId);
+    controller.removeSelected();
+
+    final child = controller.activePage.elements
+        .firstWhere((element) => element.id == childId);
+    expect(child.parentId, isNull);
+
+    controller.selectOnly(childId);
+    final after = controller.resolvedSelectedElement!;
+    expect(after.x, closeTo(before.x, .001));
+    expect(after.y, closeTo(before.y, .001));
+  });
+
   test('export emits nested html and real flex grid css', () {
     const row = WebElement(
       id: 'row',
