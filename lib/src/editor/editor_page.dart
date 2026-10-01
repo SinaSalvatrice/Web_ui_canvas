@@ -22,6 +22,7 @@ class _EditorPageState extends State<EditorPage> {
   final EditorController _controller = EditorController();
   final ProjectStorage _storage = const ProjectStorage();
   final HtmlExporter _exporter = const HtmlExporter();
+  final CanvasViewportController _viewportController = CanvasViewportController();
   final FocusNode _shortcuts = FocusNode(debugLabel: 'web-ui-canvas-shortcuts');
 
   String? _projectPath;
@@ -32,6 +33,7 @@ class _EditorPageState extends State<EditorPage> {
   @override
   void dispose() {
     _controller.dispose();
+    _viewportController.dispose();
     _shortcuts.dispose();
     super.dispose();
   }
@@ -66,6 +68,7 @@ class _EditorPageState extends State<EditorPage> {
                       Expanded(
                         child: CanvasView(
                           controller: _controller,
+                          viewportController: _viewportController,
                           previewMode: _previewMode,
                         ),
                       ),
@@ -171,23 +174,57 @@ class _EditorPageState extends State<EditorPage> {
                     _controller.setPageSize(1440, page.height);
                     break;
                   case 'tablet':
-                    _controller.setPageSize(768, page.height);
+                    _controller.setPageSize(900, page.height);
                     break;
                   case 'mobile':
                     _controller.setPageSize(390, page.height);
+                    break;
+                  case 'custom':
+                    unawaited(_editCanvasSize());
                     break;
                 }
               },
               itemBuilder: (context) => const [
                 PopupMenuItem(value: 'desktop', child: Text('Desktop · 1440')),
-                PopupMenuItem(value: 'tablet', child: Text('Tablet · 768')),
+                PopupMenuItem(value: 'tablet', child: Text('Tablet · 900')),
                 PopupMenuItem(value: 'mobile', child: Text('Mobile · 390')),
+                PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'custom',
+                  child: Text('Custom size…'),
+                ),
               ],
               child: Chip(
                 label: Text(
                   '${page.width.toStringAsFixed(0)} × ${page.height.toStringAsFixed(0)}',
                 ),
               ),
+            ),
+            const SizedBox(width: 8),
+            AnimatedBuilder(
+              animation: _viewportController,
+              builder: (context, _) {
+                final percent = (_viewportController.zoom * 100).round();
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Zoom out',
+                      onPressed: () => _viewportController.zoomBy(-.10),
+                      icon: const Icon(Icons.remove, size: 18),
+                    ),
+                    TextButton(
+                      onPressed: _viewportController.reset,
+                      child: Text('$percent%'),
+                    ),
+                    IconButton(
+                      tooltip: 'Zoom in',
+                      onPressed: () => _viewportController.zoomBy(.10),
+                      icon: const Icon(Icons.add, size: 18),
+                    ),
+                  ],
+                );
+              },
             ),
             const Spacer(),
             Text(
@@ -212,6 +249,71 @@ class _EditorPageState extends State<EditorPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _editCanvasSize() async {
+    final page = _controller.activePage;
+    final widthController =
+        TextEditingController(text: page.width.toStringAsFixed(0));
+    final heightController =
+        TextEditingController(text: page.height.toStringAsFixed(0));
+
+    final result = await showDialog<Size>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Canvas size'),
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 130,
+              child: TextField(
+                controller: widthController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Width'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 130,
+              child: TextField(
+                controller: heightController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Height'),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final width =
+                  double.tryParse(widthController.text.replaceAll(',', '.'));
+              final height =
+                  double.tryParse(heightController.text.replaceAll(',', '.'));
+              if (width == null || height == null) return;
+              Navigator.of(dialogContext).pop(Size(width, height));
+            },
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+
+    widthController.dispose();
+    heightController.dispose();
+
+    if (result != null) {
+      _controller.setPageSize(result.width, result.height);
+    }
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
