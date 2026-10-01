@@ -304,7 +304,33 @@ class EditorController extends ChangeNotifier {
   }) {
     final raw = _elementById(id);
     if (raw == null || raw.locked) return;
-    final resolved = resolveElement(raw);
+    final resolved = resolvedPageElements.firstWhere(
+      (candidate) => candidate.id == id,
+      orElse: () => resolveElement(raw),
+    );
+
+    if (isAutoLayoutManaged(id)) {
+      if (_activeBreakpoint == WebBreakpoint.desktop) {
+        updateElement(
+          raw.copyWith(
+            width: width ?? raw.width,
+            height: height ?? raw.height,
+          ),
+          commit: commit,
+        );
+      } else {
+        _updateBreakpointOverride(
+          raw,
+          (override) => override.copyWith(
+            width: width ?? resolved.width,
+            height: height ?? resolved.height,
+          ),
+          commit: commit,
+        );
+      }
+      return;
+    }
+
     _writeResolvedGeometry(
       raw,
       x: x ?? resolved.x,
@@ -892,18 +918,69 @@ class EditorController extends ChangeNotifier {
   void removeSelected() {
     if (_selectedIds.isEmpty) return;
     final ids = Set<String>.of(_selectedIds);
-    final page = activePage;
+    final before = <WebBreakpoint, Map<String, WebElement>>{
+      for (final breakpoint in WebBreakpoint.values)
+        breakpoint: {
+          for (final element
+              in PageLayoutEngine.resolvePage(activePage, breakpoint))
+            element.id: element,
+        },
+    };
+
+    final nextElements = <WebElement>[];
+    for (final raw in activePage.elements) {
+      if (ids.contains(raw.id)) continue;
+      if (raw.parentId == null || !ids.contains(raw.parentId)) {
+        nextElements.add(raw);
+        continue;
+      }
+
+      final desktop = before[WebBreakpoint.desktop]![raw.id];
+      if (desktop == null) {
+        nextElements.add(raw.copyWith(clearParentId: true));
+        continue;
+      }
+
+      final overrides =
+          Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+        raw.responsiveOverrides,
+      );
+      for (final breakpoint in [
+        WebBreakpoint.tablet,
+        WebBreakpoint.mobile,
+      ]) {
+        final current = before[breakpoint]![raw.id];
+        if (current == null) continue;
+        final existing =
+            overrides[breakpoint] ?? const WebElementBreakpointOverride();
+        overrides[breakpoint] = existing.copyWith(
+          x: current.x,
+          y: current.y,
+          width: current.width,
+          height: current.height,
+        );
+      }
+
+      nextElements.add(
+        raw.copyWith(
+          clearParentId: true,
+          x: desktop.x,
+          y: desktop.y,
+          width: desktop.width,
+          height: desktop.height,
+          responsiveOverrides: overrides,
+        ),
+      );
+    }
+
     _replacePage(
-      page.copyWith(
-        elements: page.elements.where((element) => !ids.contains(element.id)).toList(),
-      ),
+      activePage.copyWith(elements: nextElements),
       commit: true,
     );
     _clearSelectionState();
     _cropElementId = null;
     notifyListeners();
   }
-
   void copySelected() {
     if (_selectedIds.isEmpty) return;
     _clipboard = selectedElements
