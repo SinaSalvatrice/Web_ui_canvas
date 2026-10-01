@@ -15,7 +15,7 @@ class CanvasViewportController extends ChangeNotifier {
 
   final TransformationController transformation = TransformationController();
 
-  double get zoom => transformation.value.getMaxScaleOnAxis();
+  double get zoom => transformation.value.entry(0, 0).abs();
 
   void zoomBy(double delta, {Offset? focalPoint}) {
     setZoom(zoom + delta, focalPoint: focalPoint);
@@ -91,7 +91,7 @@ class _CanvasViewState extends State<CanvasView> {
   double? _rotationPointerStart;
   double _rotationValueStart = 0;
 
-  double get _scale => _transform.value.getMaxScaleOnAxis();
+  double get _scale => widget.viewportController.zoom;
 
   @override
   Widget build(BuildContext context) {
