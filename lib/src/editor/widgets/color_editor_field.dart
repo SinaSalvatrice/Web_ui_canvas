@@ -287,9 +287,10 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
   }
 
   void _applyRgba() {
-    final channels = _rgbaControllers
-        .map((controller) => int.tryParse(controller.text)?.clamp(0, 255))
-        .toList();
+    final channels = _rgbaControllers.map((controller) {
+      final parsed = int.tryParse(controller.text);
+      return parsed?.clamp(0, 255).toInt();
+    }).toList();
     if (channels.any((value) => value == null)) {
       _syncFields();
       return;
