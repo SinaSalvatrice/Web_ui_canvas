@@ -8,14 +8,72 @@ import 'package:flutter/services.dart';
 import '../../model/web_element.dart';
 import '../editor_controller.dart';
 
+class CanvasViewportController extends ChangeNotifier {
+  CanvasViewportController() {
+    transformation.addListener(_notifyTransformChanged);
+  }
+
+  final TransformationController transformation = TransformationController();
+
+  double get zoom => transformation.value.getMaxScaleOnAxis();
+
+  void zoomBy(double delta, {Offset? focalPoint}) {
+    setZoom(zoom + delta, focalPoint: focalPoint);
+  }
+
+  void setZoom(double value, {Offset? focalPoint}) {
+    final nextZoom = value.clamp(.20, 4.0).toDouble();
+    final current = transformation.value;
+    final translation = current.getTranslation();
+
+    var tx = translation.x;
+    var ty = translation.y;
+    if (focalPoint != null) {
+      final scene = transformation.toScene(focalPoint);
+      tx = focalPoint.dx - scene.dx * nextZoom;
+      ty = focalPoint.dy - scene.dy * nextZoom;
+    }
+
+    final next = Matrix4.diagonal3Values(nextZoom, nextZoom, 1)
+      ..setTranslationRaw(tx, ty, 0);
+    transformation.value = next;
+  }
+
+  void scrollBy(Offset scrollDelta) {
+    final current = Matrix4.copy(transformation.value);
+    final translation = current.getTranslation();
+    current.setTranslationRaw(
+      translation.x - scrollDelta.dx,
+      translation.y - scrollDelta.dy,
+      translation.z,
+    );
+    transformation.value = current;
+  }
+
+  void reset() {
+    transformation.value = Matrix4.identity();
+  }
+
+  void _notifyTransformChanged() => notifyListeners();
+
+  @override
+  void dispose() {
+    transformation.removeListener(_notifyTransformChanged);
+    transformation.dispose();
+    super.dispose();
+  }
+}
+
 class CanvasView extends StatefulWidget {
   const CanvasView({
     required this.controller,
+    required this.viewportController,
     required this.previewMode,
     super.key,
   });
 
   final EditorController controller;
+  final CanvasViewportController viewportController;
   final bool previewMode;
 
   @override
@@ -25,19 +83,15 @@ class CanvasView extends StatefulWidget {
 class _CanvasViewState extends State<CanvasView> {
   static const _margin = 420.0;
 
-  final TransformationController _transform = TransformationController();
   final GlobalKey _viewportKey = GlobalKey();
+
+  TransformationController get _transform =>
+      widget.viewportController.transformation;
 
   double? _rotationPointerStart;
   double _rotationValueStart = 0;
 
   double get _scale => _transform.value.getMaxScaleOnAxis();
-
-  @override
-  void dispose() {
-    _transform.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,10 +115,15 @@ class _CanvasViewState extends State<CanvasView> {
         return Listener(
           key: _viewportKey,
           onPointerSignal: (signal) {
-            if (signal is PointerScrollEvent &&
-                HardwareKeyboard.instance.isShiftPressed) {
-              // Reserved for the centralized horizontal-pan policy.
-            }
+            if (signal is! PointerScrollEvent) return;
+            GestureBinding.instance.pointerSignalResolver.register(
+              signal,
+              (resolved) {
+                if (resolved is PointerScrollEvent) {
+                  _handlePointerScroll(resolved);
+                }
+              },
+            );
           },
           child: AnimatedBuilder(
             animation: _transform,
@@ -72,6 +131,8 @@ class _CanvasViewState extends State<CanvasView> {
               return InteractiveViewer(
                 transformationController: _transform,
                 constrained: false,
+                panEnabled: false,
+                scaleEnabled: false,
                 minScale: .20,
                 maxScale: 4,
                 boundaryMargin: const EdgeInsets.all(1000),
@@ -158,6 +219,31 @@ class _CanvasViewState extends State<CanvasView> {
         );
       },
     );
+  }
+
+  void _handlePointerScroll(PointerScrollEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    final primary = keyboard.isControlPressed || keyboard.isMetaPressed;
+
+    if (primary) {
+      final amount =
+          event.scrollDelta.dy != 0 ? event.scrollDelta.dy : event.scrollDelta.dx;
+      if (amount == 0) return;
+      widget.viewportController.zoomBy(
+        amount < 0 ? .10 : -.10,
+        focalPoint: event.localPosition,
+      );
+      return;
+    }
+
+    if (keyboard.isShiftPressed) {
+      final amount =
+          event.scrollDelta.dy != 0 ? event.scrollDelta.dy : event.scrollDelta.dx;
+      widget.viewportController.scrollBy(Offset(amount, 0));
+      return;
+    }
+
+    widget.viewportController.scrollBy(event.scrollDelta);
   }
 
   Widget _buildElement(WebElement element) {
