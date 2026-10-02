@@ -314,6 +314,13 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                     title: Text('Export PNG'),
                   ),
                 ),
+                const PopupMenuItem(
+                  value: 'exportCopy',
+                  child: ListTile(
+                    leading: Icon(Icons.file_copy_outlined),
+                    title: Text('Export HTML/CSS copy'),
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'export',
                   child: ListTile(
@@ -482,6 +489,9 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
       case 'pngExport':
         unawaited(_exportPng());
         break;
+      case 'exportCopy':
+        unawaited(_exportCopy());
+        break;
       case 'export':
         unawaited(_export());
         break;
@@ -643,6 +653,11 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
               tooltip: 'Export PNG',
               onPressed: _busy ? null : _exportPng,
               icon: const Icon(Icons.image_outlined),
+            ),
+            IconButton(
+              tooltip: 'Export HTML/CSS copy',
+              onPressed: _busy ? null : _exportCopy,
+              icon: const Icon(Icons.file_copy_outlined),
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
@@ -1038,6 +1053,25 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
           _pngExporting = false;
         });
       }
+    }
+  }
+
+  Future<void> _exportCopy() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await _exporter.export(
+        _controller.project.copyWith(clearLinkedWebsitePath: true),
+      );
+      if (result != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('HTML/CSS copy exported to ${result.directory.path}')),
+        );
+      }
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
