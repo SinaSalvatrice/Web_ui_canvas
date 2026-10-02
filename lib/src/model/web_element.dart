@@ -10,6 +10,7 @@ enum WebElementType {
   section,
   navigation,
   input,
+  toggle,
   card;
 
   String get label => switch (this) {
@@ -21,6 +22,7 @@ enum WebElementType {
         WebElementType.section => 'Section',
         WebElementType.navigation => 'Navigation',
         WebElementType.input => 'Input',
+        WebElementType.toggle => 'Switch',
         WebElementType.card => 'Card',
       };
 }
@@ -28,7 +30,9 @@ enum WebElementType {
 extension WebElementTypeX on WebElementType {
   String get category => switch (this) {
         WebElementType.text || WebElementType.image => 'Content',
-        WebElementType.button || WebElementType.input => 'Controls',
+        WebElementType.button ||
+        WebElementType.input ||
+        WebElementType.toggle => 'Controls',
         WebElementType.divider => 'Content',
         WebElementType.container ||
         WebElementType.section ||
@@ -46,6 +50,7 @@ extension WebElementTypeX on WebElementType {
         WebElementType.section => 960,
         WebElementType.navigation => 960,
         WebElementType.input => 300,
+        WebElementType.toggle => 64,
         WebElementType.card => 340,
       };
 
@@ -58,6 +63,7 @@ extension WebElementTypeX on WebElementType {
         WebElementType.section => 360,
         WebElementType.navigation => 72,
         WebElementType.input => 52,
+        WebElementType.toggle => 36,
         WebElementType.card => 300,
       };
 
@@ -70,6 +76,7 @@ extension WebElementTypeX on WebElementType {
         WebElementType.section => 'Section',
         WebElementType.navigation => 'Home    About    Contact',
         WebElementType.input => 'Input',
+        WebElementType.toggle => '',
         WebElementType.card => 'Card',
       };
 }
@@ -88,6 +95,11 @@ class WebElement {
     this.text = '',
     this.href = '',
     this.imagePath,
+    this.backplatePath,
+    this.backplateEnabled = false,
+    this.backplateFit = 'cover',
+    this.maskPath,
+    this.maskEnabled = false,
     this.backgroundColor,
     this.foregroundColor = 0xff202020,
     this.borderColor,
@@ -101,6 +113,15 @@ class WebElement {
     this.letterSpacing = 0,
     this.lineHeight = 1.2,
     this.textAlign = 'left',
+    this.textMode = 'wrap',
+    this.textHighlightColor,
+    this.textStrokeColor,
+    this.textStrokeWidth = 0,
+    this.transition = 'none',
+    this.transitionEnabled = false,
+    this.transitionDurationMs = 420,
+    this.pressScaleEnabled = false,
+    this.pressScale = .96,
     this.anchorX = 'left',
     this.anchorY = 'top',
     this.imageFit = 'cover',
@@ -144,6 +165,11 @@ class WebElement {
   final String text;
   final String href;
   final String? imagePath;
+  final String? backplatePath;
+  final bool backplateEnabled;
+  final String backplateFit;
+  final String? maskPath;
+  final bool maskEnabled;
   final int? backgroundColor;
   final int foregroundColor;
   final int? borderColor;
@@ -157,6 +183,15 @@ class WebElement {
   final double letterSpacing;
   final double lineHeight;
   final String textAlign;
+  final String textMode;
+  final int? textHighlightColor;
+  final int? textStrokeColor;
+  final double textStrokeWidth;
+  final String transition;
+  final bool transitionEnabled;
+  final int transitionDurationMs;
+  final bool pressScaleEnabled;
+  final double pressScale;
   final String anchorX;
   final String anchorY;
   final String imageFit;
@@ -204,6 +239,7 @@ class WebElement {
       WebElementType.card => 0xfff4f4f4,
       WebElementType.navigation => 0xfff7f7f7,
       WebElementType.input => 0xffffffff,
+      WebElementType.toggle => 0xffd0d0d0,
       _ => null,
     };
     final foreground =
@@ -226,7 +262,11 @@ class WebElement {
       foregroundColor: foreground,
       borderColor: borderWidth > 0 ? 0xffbdbdbd : null,
       borderWidth: borderWidth,
-      borderRadius: type == WebElementType.button ? 8 : 0,
+      borderRadius: type == WebElementType.button
+          ? 8
+          : type == WebElementType.toggle
+              ? 999
+              : 0,
       fontSize: type == WebElementType.navigation ? 18 : 22,
       fontWeight: type == WebElementType.button ? 600 : 400,
     );
@@ -244,6 +284,13 @@ class WebElement {
     String? href,
     String? imagePath,
     bool clearImagePath = false,
+    String? backplatePath,
+    bool clearBackplatePath = false,
+    bool? backplateEnabled,
+    String? backplateFit,
+    String? maskPath,
+    bool clearMaskPath = false,
+    bool? maskEnabled,
     int? backgroundColor,
     bool clearBackgroundColor = false,
     int? foregroundColor,
@@ -260,6 +307,17 @@ class WebElement {
     double? letterSpacing,
     double? lineHeight,
     String? textAlign,
+    String? textMode,
+    int? textHighlightColor,
+    bool clearTextHighlightColor = false,
+    int? textStrokeColor,
+    bool clearTextStrokeColor = false,
+    double? textStrokeWidth,
+    String? transition,
+    bool? transitionEnabled,
+    int? transitionDurationMs,
+    bool? pressScaleEnabled,
+    double? pressScale,
     String? anchorX,
     String? anchorY,
     String? imageFit,
@@ -308,6 +366,13 @@ class WebElement {
       text: text ?? this.text,
       href: href ?? this.href,
       imagePath: clearImagePath ? null : (imagePath ?? this.imagePath),
+      backplatePath: clearBackplatePath
+          ? null
+          : (backplatePath ?? this.backplatePath),
+      backplateEnabled: backplateEnabled ?? this.backplateEnabled,
+      backplateFit: backplateFit ?? this.backplateFit,
+      maskPath: clearMaskPath ? null : (maskPath ?? this.maskPath),
+      maskEnabled: maskEnabled ?? this.maskEnabled,
       backgroundColor:
           clearBackgroundColor ? null : (backgroundColor ?? this.backgroundColor),
       foregroundColor: foregroundColor ?? this.foregroundColor,
@@ -322,6 +387,19 @@ class WebElement {
       letterSpacing: letterSpacing ?? this.letterSpacing,
       lineHeight: lineHeight ?? this.lineHeight,
       textAlign: textAlign ?? this.textAlign,
+      textMode: textMode ?? this.textMode,
+      textHighlightColor: clearTextHighlightColor
+          ? null
+          : (textHighlightColor ?? this.textHighlightColor),
+      textStrokeColor: clearTextStrokeColor
+          ? null
+          : (textStrokeColor ?? this.textStrokeColor),
+      textStrokeWidth: textStrokeWidth ?? this.textStrokeWidth,
+      transition: transition ?? this.transition,
+      transitionEnabled: transitionEnabled ?? this.transitionEnabled,
+      transitionDurationMs: transitionDurationMs ?? this.transitionDurationMs,
+      pressScaleEnabled: pressScaleEnabled ?? this.pressScaleEnabled,
+      pressScale: pressScale ?? this.pressScale,
       anchorX: anchorX ?? this.anchorX,
       anchorY: anchorY ?? this.anchorY,
       imageFit: imageFit ?? this.imageFit,
@@ -367,6 +445,11 @@ class WebElement {
         'text': text,
         'href': href,
         'imagePath': imagePath,
+        'backplatePath': backplatePath,
+        'backplateEnabled': backplateEnabled,
+        'backplateFit': backplateFit,
+        'maskPath': maskPath,
+        'maskEnabled': maskEnabled,
         'backgroundColor': backgroundColor,
         'foregroundColor': foregroundColor,
         'borderColor': borderColor,
@@ -380,6 +463,15 @@ class WebElement {
         'letterSpacing': letterSpacing,
         'lineHeight': lineHeight,
         'textAlign': textAlign,
+        'textMode': textMode,
+        'textHighlightColor': textHighlightColor,
+        'textStrokeColor': textStrokeColor,
+        'textStrokeWidth': textStrokeWidth,
+        'transition': transition,
+        'transitionEnabled': transitionEnabled,
+        'transitionDurationMs': transitionDurationMs,
+        'pressScaleEnabled': pressScaleEnabled,
+        'pressScale': pressScale,
         'anchorX': anchorX,
         'anchorY': anchorY,
         'imageFit': imageFit,
@@ -428,6 +520,11 @@ class WebElement {
         text: json['text'] as String? ?? '',
         href: json['href'] as String? ?? '',
         imagePath: json['imagePath'] as String?,
+        backplatePath: json['backplatePath'] as String?,
+        backplateEnabled: json['backplateEnabled'] as bool? ?? false,
+        backplateFit: json['backplateFit'] as String? ?? 'cover',
+        maskPath: json['maskPath'] as String?,
+        maskEnabled: json['maskEnabled'] as bool? ?? false,
         backgroundColor: json['backgroundColor'] as int?,
         foregroundColor: json['foregroundColor'] as int? ?? 0xff202020,
         borderColor: json['borderColor'] as int?,
@@ -441,6 +538,15 @@ class WebElement {
         letterSpacing: (json['letterSpacing'] as num?)?.toDouble() ?? 0,
         lineHeight: (json['lineHeight'] as num?)?.toDouble() ?? 1.2,
         textAlign: json['textAlign'] as String? ?? 'left',
+        textMode: json['textMode'] as String? ?? 'wrap',
+        textHighlightColor: json['textHighlightColor'] as int?,
+        textStrokeColor: json['textStrokeColor'] as int?,
+        textStrokeWidth: (json['textStrokeWidth'] as num?)?.toDouble() ?? 0,
+        transition: json['transition'] as String? ?? 'none',
+        transitionEnabled: json['transitionEnabled'] as bool? ?? false,
+        transitionDurationMs: (json['transitionDurationMs'] as num?)?.toInt() ?? 420,
+        pressScaleEnabled: json['pressScaleEnabled'] as bool? ?? false,
+        pressScale: (json['pressScale'] as num?)?.toDouble() ?? .96,
         anchorX: json['anchorX'] as String? ?? 'left',
         anchorY: json['anchorY'] as String? ?? 'top',
         imageFit: json['imageFit'] as String? ?? 'cover',
