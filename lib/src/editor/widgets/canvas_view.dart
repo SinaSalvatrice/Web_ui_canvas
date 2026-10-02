@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../model/web_element.dart';
 import '../editor_controller.dart';
@@ -70,12 +71,14 @@ class CanvasView extends StatefulWidget {
     required this.controller,
     required this.viewportController,
     required this.previewMode,
+    this.exportKey,
     super.key,
   });
 
   final EditorController controller;
   final CanvasViewportController viewportController;
   final bool previewMode;
+  final GlobalKey? exportKey;
 
   @override
   State<CanvasView> createState() => _CanvasViewState();
@@ -835,21 +838,31 @@ class _CanvasViewState extends State<CanvasView> {
       content = Center(
         child: Container(height: 1, color: foreground.withValues(alpha: .5)),
       );
+    } else if (element.type == WebElementType.toggle) {
+      content = Padding(
+        padding: const EdgeInsets.all(3),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(
+            widthFactor: .44,
+            heightFactor: .82,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: foreground,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+      );
     } else if (element.type == WebElementType.input) {
       content = Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Text(
-            element.text,
-            style: TextStyle(
-              color: foreground.withValues(alpha: .55),
-              fontSize: element.fontSize,
-              fontWeight: _fontWeight(element.fontWeight),
-              fontFamily: element.fontFamily,
-              letterSpacing: element.letterSpacing,
-              height: element.lineHeight,
-            ),
+          child: _styledText(
+            element,
+            foreground.withValues(alpha: .55),
           ),
         ),
       );
@@ -858,21 +871,15 @@ class _CanvasViewState extends State<CanvasView> {
         padding: const EdgeInsets.all(10),
         child: Align(
           alignment: _alignment(element.textAlign),
-          child: Text(
-            element.text,
-            textAlign: _textAlign(element.textAlign),
-            style: TextStyle(
-              color: foreground,
-              fontSize: element.fontSize,
-              fontWeight: _fontWeight(element.fontWeight),
-              fontFamily: element.fontFamily,
-              letterSpacing: element.letterSpacing,
-              height: element.lineHeight,
-            ),
-          ),
+          child: _styledText(element, foreground),
         ),
       );
     }
+
+    final backplatePath = element.backplateEnabled ? element.backplatePath : null;
+    final backplate = backplatePath == null
+        ? null
+        : _assetVisual(backplatePath, element.backplateFit);
 
     return Opacity(
       opacity: element.opacity.clamp(0.0, 1.0).toDouble(),
@@ -888,9 +895,104 @@ class _CanvasViewState extends State<CanvasView> {
                   )
                 : null,
           ),
-          child: content,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (backplate != null)
+                IgnorePointer(child: backplate),
+              content,
+              if (element.maskEnabled && element.maskPath != null)
+                Positioned(
+                  right: 4,
+                  bottom: 4,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: .54),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        child: Text(
+                          'MASK',
+                          style: TextStyle(color: Colors.white, fontSize: 9),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _styledText(WebElement element, Color foreground) {
+    final baseStyle = TextStyle(
+      color: foreground,
+      fontSize: element.fontSize,
+      fontWeight: _fontWeight(element.fontWeight),
+      fontFamily: element.fontFamily,
+      letterSpacing: element.letterSpacing,
+      height: element.lineHeight,
+      backgroundColor: element.textHighlightColor == null
+          ? null
+          : Color(element.textHighlightColor!),
+    );
+    final softWrap = element.textMode != 'fixedSize';
+    final overflow = element.textMode == 'fixedWidth'
+        ? TextOverflow.visible
+        : TextOverflow.clip;
+
+    final fill = Text(
+      element.text,
+      textAlign: _textAlign(element.textAlign),
+      softWrap: softWrap,
+      overflow: overflow,
+      style: baseStyle,
+    );
+
+    if (element.textStrokeColor == null || element.textStrokeWidth <= 0) {
+      return fill;
+    }
+
+    final stroke = Text(
+      element.text,
+      textAlign: _textAlign(element.textAlign),
+      softWrap: softWrap,
+      overflow: overflow,
+      style: baseStyle.copyWith(
+        color: null,
+        backgroundColor: null,
+        foreground: Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = element.textStrokeWidth
+          ..color = Color(element.textStrokeColor!),
+      ),
+    );
+
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [stroke, fill],
+    );
+  }
+
+  Widget? _assetVisual(String path, String fit) {
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    if (path.toLowerCase().endsWith('.svg')) {
+      return SvgPicture.file(
+        file,
+        fit: _boxFit(fit),
+      );
+    }
+    return Image.file(
+      file,
+      fit: _boxFit(fit),
+      filterQuality: FilterQuality.high,
+      isAntiAlias: true,
+      errorBuilder: (_, __, ___) => _imagePlaceholder(),
     );
   }
 
