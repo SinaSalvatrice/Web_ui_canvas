@@ -57,6 +57,7 @@ function Apply-AndroidIcon {
             android:viewportHeight="108">
             <path
                 android:fillColor="#FFFFFFFF"
+                android:fillType="evenOdd"
                 android:pathData="$pathData" />
         </vector>
     </item>
