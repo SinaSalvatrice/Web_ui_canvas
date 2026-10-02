@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../model/asset_library.dart';
+import '../../services/font_catalog.dart';
 import '../editor_controller.dart';
 
 class AssetLibraryPanel extends StatefulWidget {
@@ -119,7 +120,15 @@ class _AssetLibraryPanelState extends State<AssetLibraryPanel> {
                       libraryEnabled: project.assetLibraryEnabled,
                       onToggle: (enabled) => widget.controller
                           .updateLibraryAsset(item.copyWith(enabled: enabled)),
-                      onUse: () => widget.controller.applyLibraryAsset(item),
+                      onUse: () async {
+                        if (item.category == AssetCategory.fonts) {
+                          await FontCatalog.instance.ensureLoaded(
+                            family: item.label,
+                            path: item.path,
+                          );
+                        }
+                        widget.controller.applyLibraryAsset(item);
+                      },
                       onRemove: () =>
                           widget.controller.removeLibraryAsset(item.id),
                     );
