@@ -824,7 +824,15 @@ class InspectorPanel extends StatelessWidget {
               ),
             ],
             onChanged: (value) {
-              if (value != null) _update(element.copyWith(textMode: value));
+              if (value == null) return;
+              _update(
+                element.copyWith(
+                  textMode: value,
+                  heightMode: value == 'fixedWidth'
+                      ? WebSizeMode.hug
+                      : WebSizeMode.fixed,
+                ),
+              );
             },
           ),
         ],
