@@ -288,7 +288,7 @@ void main() {
     expect(
       html,
       contains(
-        '<div id="row" class="webui-element"><div id="child" class="webui-element">Hello</div></div>',
+        '<div id="row" class="webui-element"><div id="child" class="webui-element"><span class="webui-text">Hello</span></div></div>',
       ),
     );
     expect(css, contains('display: flex;'));

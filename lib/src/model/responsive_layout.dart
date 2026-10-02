@@ -150,7 +150,17 @@ class ResponsiveLayoutResolver {
         element.type == WebElementType.card) {
       return element.height;
     }
-    final lines = math.max(1, '\n'.allMatches(element.text).length + 1);
+    final glyphWidth = math.max(
+      1.0,
+      element.fontSize * .58 + math.max(0.0, element.letterSpacing),
+    );
+    final usableWidth = math.max(1.0, element.width - 20);
+    final charsPerLine = math.max(1, (usableWidth / glyphWidth).floor());
+    var lines = 0;
+    for (final paragraph in element.text.split('\n')) {
+      final chars = math.max(1, paragraph.runes.length);
+      lines += math.max(1, (chars / charsPerLine).ceil());
+    }
     return math.max(
       24.0,
       lines * element.fontSize * element.lineHeight + 20,

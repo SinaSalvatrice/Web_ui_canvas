@@ -18,11 +18,13 @@ class HtmlExportResult {
     required this.directory,
     required this.htmlFile,
     required this.cssFile,
+    this.backupDirectory,
   });
 
   final Directory directory;
   final File htmlFile;
   final File cssFile;
+  final Directory? backupDirectory;
 }
 
 class HtmlExporter {
@@ -41,6 +43,7 @@ class HtmlExporter {
 
     final root = Directory(chosen);
     await root.create(recursive: true);
+    final backupDirectory = await _backupExisting(root);
     final assets = Directory(p.join(root.path, 'assets'));
     await assets.create(recursive: true);
 
@@ -64,6 +67,7 @@ class HtmlExporter {
       directory: root,
       htmlFile: htmlFile,
       cssFile: cssFile,
+      backupDirectory: backupDirectory,
     );
   }
 
@@ -74,7 +78,12 @@ class HtmlExporter {
     final map = <String, String>{};
     final used = <String>{};
     for (final element in page.elements) {
-      for (final sourcePath in [element.imagePath, element.fontPath]) {
+      for (final sourcePath in [
+        element.imagePath,
+        element.fontPath,
+        element.backplatePath,
+        element.maskPath,
+      ]) {
         if (sourcePath == null || map.containsKey(sourcePath)) continue;
         final source = File(sourcePath);
         if (!await source.exists()) continue;
@@ -127,6 +136,14 @@ class HtmlExporter {
   <main class="webui-page">
 $body
   </main>
+  <script>
+    document.querySelectorAll('[data-webui-toggle]').forEach((element) => {
+      element.addEventListener('click', () => {
+        const active = element.getAttribute('aria-checked') === 'true';
+        element.setAttribute('aria-checked', (!active).toString());
+      });
+    });
+  </script>
 </body>
 </html>
 ''';
@@ -165,23 +182,30 @@ $body
     final id = _escapeAttribute(element.id);
     final text = _escape(element.text);
     final hasChildren = children.isNotEmpty;
-    final content = hasChildren ? children : text;
+    final textContent = '<span class="webui-text">$text</span>';
+    final content = hasChildren ? children : textContent;
+    final backplateAsset = assets[element.backplatePath];
+    final backplate = element.backplateEnabled && backplateAsset != null
+        ? '<img class="webui-backplate" src="${_escapeAttribute(backplateAsset)}" alt="" aria-hidden="true">'
+        : '';
 
     return switch (element.type) {
       WebElementType.image =>
-        '<div id="$id" class="webui-element webui-image-frame"><img class="webui-image-content" src="${_escapeAttribute(assets[element.imagePath] ?? '')}" alt=""></div>',
+        '<div id="$id" class="webui-element webui-image-frame">$backplate<img class="webui-image-content" src="${_escapeAttribute(assets[element.imagePath] ?? '')}" alt=""></div>',
       WebElementType.button => element.href.trim().isNotEmpty
-          ? '<a id="$id" class="webui-element" href="${_escapeAttribute(element.href)}">$content</a>'
-          : '<button id="$id" class="webui-element" type="button">$content</button>',
+          ? '<a id="$id" class="webui-element" href="${_escapeAttribute(element.href)}">$backplate$content</a>'
+          : '<button id="$id" class="webui-element" type="button">$backplate$content</button>',
       WebElementType.input =>
-        '<input id="$id" class="webui-element" placeholder="${_escapeAttribute(element.text)}">',
+        '<label id="$id" class="webui-element webui-input-frame">$backplate<input class="webui-input-control" placeholder="${_escapeAttribute(element.text)}"></label>',
+      WebElementType.toggle =>
+        '<button id="$id" class="webui-element webui-toggle" type="button" role="switch" aria-checked="false" data-webui-toggle>$backplate<span class="webui-toggle-knob"></span></button>',
       WebElementType.navigation =>
-        '<nav id="$id" class="webui-element">$content</nav>',
+        '<nav id="$id" class="webui-element">$backplate$content</nav>',
       WebElementType.section =>
-        '<section id="$id" class="webui-element">$content</section>',
+        '<section id="$id" class="webui-element">$backplate$content</section>',
       WebElementType.divider =>
         '<div id="$id" class="webui-element" aria-hidden="true"></div>',
-      _ => '<div id="$id" class="webui-element">$content</div>',
+      _ => '<div id="$id" class="webui-element">$backplate$content</div>',
     };
   }
 
@@ -238,7 +262,19 @@ $body
       ..writeln('  overflow: hidden;')
       ..writeln('  background: ${_color(page.backgroundColor)};')
       ..writeln('}')
-      ..writeln('.webui-element { box-sizing: border-box; position: absolute; }');
+      ..writeln('.webui-element { box-sizing: border-box; position: absolute; }')
+      ..writeln('.webui-backplate { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }')
+      ..writeln('.webui-text, .webui-input-control, .webui-toggle-knob { position: relative; z-index: 1; }')
+      ..writeln('.webui-input-control { box-sizing: border-box; width: 100%; height: 100%; border: 0; background: transparent; color: inherit; font: inherit; }')
+      ..writeln('.webui-toggle { padding: 0; cursor: pointer; }')
+      ..writeln('.webui-toggle-knob { display: block; width: 44%; aspect-ratio: 1; border-radius: 50%; background: currentColor; margin: 3px; transition: transform 180ms ease; }')
+      ..writeln('.webui-toggle[aria-checked="true"] .webui-toggle-knob { transform: translateX(100%); }')
+      ..writeln('@keyframes webui-slide-left { from { opacity: 0; translate: -32px 0; } to { opacity: 1; translate: 0 0; } }')
+      ..writeln('@keyframes webui-slide-right { from { opacity: 0; translate: 32px 0; } to { opacity: 1; translate: 0 0; } }')
+      ..writeln('@keyframes webui-slide-up { from { opacity: 0; translate: 0 -32px; } to { opacity: 1; translate: 0 0; } }')
+      ..writeln('@keyframes webui-slide-down { from { opacity: 0; translate: 0 32px; } to { opacity: 1; translate: 0 0; } }')
+      ..writeln('@keyframes webui-fade { from { opacity: 0; } to { opacity: 1; } }')
+      ..writeln('@keyframes webui-bounce { 0% { scale: .86; } 55% { scale: 1.06; } 100% { scale: 1; } }');
 
     final rawById = {
       for (final element in page.elements) element.id: element,
@@ -253,7 +289,14 @@ $body
         WebBreakpoint.desktop,
         rawById,
         desktopLayout,
+        assets,
       );
+      if (element.backplateEnabled && assets[element.backplatePath] != null) {
+        buffer
+          ..writeln('#${element.id} > .webui-backplate {')
+          ..writeln('  object-fit: ${element.backplateFit};')
+          ..writeln('}');
+      }
       if (element.type == WebElementType.image) {
         buffer
           ..writeln('#${element.id} > .webui-image-content {')
@@ -290,6 +333,7 @@ $body
           breakpoint,
           rawById,
           layout,
+          assets,
           indent: '  ',
         );
       }
@@ -312,7 +356,8 @@ $body
     WebElement element,
     WebBreakpoint breakpoint,
     Map<String, WebElement> rawById,
-    Map<String, WebElement> layout, {
+    Map<String, WebElement> layout,
+    Map<String, String> assets, {
     String indent = '',
   }) {
     final resolved = layout[element.id] ??
@@ -436,12 +481,128 @@ $body
         '$indent  border: ${resolved.borderWidth}px solid ${resolved.borderColor == null ? 'transparent' : _color(resolved.borderColor!)};',
       );
 
+    if (resolved.maskEnabled && assets[resolved.maskPath] != null) {
+      final mask = assets[resolved.maskPath]!;
+      buffer
+        ..writeln('$indent  -webkit-mask-image: url("$mask");')
+        ..writeln('$indent  mask-image: url("$mask");')
+        ..writeln('$indent  -webkit-mask-size: cover;')
+        ..writeln('$indent  mask-size: cover;')
+        ..writeln('$indent  -webkit-mask-repeat: no-repeat;')
+        ..writeln('$indent  mask-repeat: no-repeat;');
+    }
+
+    final animation = _animationName(resolved);
+    if (animation != null) {
+      buffer.writeln(
+        '$indent  animation: $animation ${resolved.transitionDurationMs}ms cubic-bezier(.2,.8,.2,1) both;',
+      );
+    }
+
+    if (resolved.textMode == 'fixedSize') {
+      buffer
+        ..writeln('$indent  white-space: pre;')
+        ..writeln('$indent  overflow-wrap: normal;');
+    } else {
+      buffer
+        ..writeln('$indent  white-space: pre-wrap;')
+        ..writeln('$indent  overflow-wrap: anywhere;');
+      if (resolved.textMode == 'fixedWidth' &&
+          resolved.type != WebElementType.image) {
+        buffer.writeln('$indent  height: auto;');
+      }
+    }
+
+    final hasTextEffect = resolved.textHighlightColor != null ||
+        resolved.textStrokeColor != null ||
+        resolved.textStrokeWidth > 0;
+
     _writeContainerLayout(buffer, element, indent);
 
     if (resolved.type == WebElementType.image) {
       buffer.writeln('$indent  overflow: hidden;');
     }
     buffer.writeln('$indent}');
+
+    if (hasTextEffect) {
+      buffer.writeln('$indent#${resolved.id} > .webui-text {');
+      if (resolved.textHighlightColor != null) {
+        buffer.writeln(
+          '$indent  background: ${_color(resolved.textHighlightColor!)};',
+        );
+      }
+      if (resolved.textStrokeColor != null && resolved.textStrokeWidth > 0) {
+        buffer
+          ..writeln(
+            '$indent  -webkit-text-stroke: ${resolved.textStrokeWidth}px ${_color(resolved.textStrokeColor!)};',
+          )
+          ..writeln('$indent  paint-order: stroke fill;');
+      }
+      buffer.writeln('$indent}');
+    }
+
+    if (resolved.pressScaleEnabled) {
+      buffer
+        ..writeln('$indent#${resolved.id}:active {')
+        ..writeln('$indent  scale: ${resolved.pressScale.clamp(.5, 1.0)};')
+        ..writeln('$indent}');
+    }
+  }
+
+  String? _animationName(WebElement element) {
+    if (!element.transitionEnabled || element.transition == 'none') return null;
+    return switch (element.transition) {
+      'slideLeft' => 'webui-slide-left',
+      'slideRight' => 'webui-slide-right',
+      'slideUp' => 'webui-slide-up',
+      'slideDown' => 'webui-slide-down',
+      'fade' => 'webui-fade',
+      'bounce' => 'webui-bounce',
+      _ => null,
+    };
+  }
+
+  Future<Directory?> _backupExisting(Directory root) async {
+    final candidates = <FileSystemEntity>[
+      File(p.join(root.path, 'index.html')),
+      File(p.join(root.path, 'styles.css')),
+      File(p.join(root.path, 'web-ui-canvas.webui')),
+      Directory(p.join(root.path, 'assets')),
+    ];
+    final existing = <FileSystemEntity>[];
+    for (final entity in candidates) {
+      if (await entity.exists()) existing.add(entity);
+    }
+    if (existing.isEmpty) return null;
+
+    final stamp = DateTime.now()
+        .toUtc()
+        .toIso8601String()
+        .replaceAll(':', '-');
+    final backup = Directory(p.join(root.path, '.webui-backups', stamp));
+    await backup.create(recursive: true);
+
+    for (final entity in existing) {
+      final name = p.basename(entity.path);
+      if (entity is File) {
+        await entity.copy(p.join(backup.path, name));
+      } else if (entity is Directory) {
+        await _copyDirectory(entity, Directory(p.join(backup.path, name)));
+      }
+    }
+    return backup;
+  }
+
+  Future<void> _copyDirectory(Directory source, Directory target) async {
+    await target.create(recursive: true);
+    await for (final entity in source.list(recursive: false, followLinks: false)) {
+      final destination = p.join(target.path, p.basename(entity.path));
+      if (entity is File) {
+        await entity.copy(destination);
+      } else if (entity is Directory) {
+        await _copyDirectory(entity, Directory(destination));
+      }
+    }
   }
 
   String _widthCss(

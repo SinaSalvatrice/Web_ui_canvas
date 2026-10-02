@@ -139,6 +139,7 @@ class WebsiteLinkService {
     for (final node in nodes) {
       final rule = _idRule(css, node.id);
       final imageRule = _imageContentRule(css, node.id);
+      final backplateRule = _backplateRule(css, node.id);
       final widthValue = _declaration(rule, 'width');
       final heightValue = _declaration(rule, 'height');
       final width = _px(widthValue) ?? node.type.defaultWidth;
@@ -153,13 +154,21 @@ class WebsiteLinkService {
         type = WebElementType.divider;
       }
 
-      var imagePath = node.imageSource;
-      if (imagePath != null &&
-          Uri.tryParse(imagePath)?.hasScheme != true &&
-          !p.isAbsolute(imagePath)) {
-        imagePath =
-            p.normalize(p.join(websiteDirectory, Uri.decodeComponent(imagePath)));
-      }
+      final imagePath = _localAssetPath(
+        websiteDirectory,
+        node.imageSource,
+      );
+      final backplatePath = _localAssetPath(
+        websiteDirectory,
+        node.backplateSource,
+      );
+      final maskPath = _localAssetPath(
+        websiteDirectory,
+        _cssUrl(
+          _declaration(rule, 'mask-image') ??
+              _declaration(rule, '-webkit-mask-image'),
+        ),
+      );
 
       final border = _parseBorder(_declaration(rule, 'border'));
       final widthPercent = _percent(widthValue);
@@ -178,6 +187,11 @@ class WebsiteLinkService {
           text: node.text.trim(),
           href: node.href ?? '',
           imagePath: imagePath,
+          backplatePath: backplatePath,
+          backplateEnabled: backplatePath != null,
+          backplateFit: _declaration(backplateRule, 'object-fit') ?? 'cover',
+          maskPath: maskPath,
+          maskEnabled: maskPath != null,
           backgroundColor: _colorFrom(_declaration(rule, 'background')),
           foregroundColor:
               _colorFrom(_declaration(rule, 'color')) ?? 0xff202020,
@@ -190,6 +204,10 @@ class WebsiteLinkService {
           fontWeight:
               int.tryParse(_declaration(rule, 'font-weight') ?? '') ?? 400,
           fontFamily: _fontFamily(_declaration(rule, 'font-family')),
+          textAlign: _declaration(rule, 'text-align') ?? 'left',
+          textMode: _textMode(rule),
+          transition: _transition(rule),
+          transitionEnabled: _transition(rule) != 'none',
           anchorX: anchorX,
           anchorY: anchorY,
           imageFit: _declaration(imageRule, 'object-fit') ?? 'cover',
@@ -266,9 +284,24 @@ class WebsiteLinkService {
         if (tag == 'img') {
           if (stack.isNotEmpty) {
             final src = _attr(token, 'src');
-            if (src != null) stack.last.node.imageSource = src;
+            final classes = _attr(token, 'class') ?? '';
+            if (src != null) {
+              if (classes.split(RegExp(r'\s+')).contains('webui-backplate')) {
+                stack.last.node.backplateSource = src;
+              } else {
+                stack.last.node.imageSource = src;
+              }
+            }
           }
           continue;
+        }
+
+        if (tag == 'input' && stack.isNotEmpty) {
+          final classes = _attr(token, 'class') ?? '';
+          if (classes.split(RegExp(r'\s+')).contains('webui-input-control')) {
+            stack.last.node.text = _attr(token, 'placeholder') ?? '';
+            continue;
+          }
         }
 
         if (!_supportedTag(tag)) continue;
@@ -343,6 +376,8 @@ class WebsiteLinkService {
 
   WebElementType _typeFor(String tag, String classes) {
     if (classes.contains('webui-image-frame')) return WebElementType.image;
+    if (classes.contains('webui-input-frame')) return WebElementType.input;
+    if (classes.contains('webui-toggle')) return WebElementType.toggle;
     return switch (tag) {
       'button' || 'a' => WebElementType.button,
       'input' => WebElementType.input,
@@ -379,6 +414,16 @@ class WebsiteLinkService {
         '';
   }
 
+  String _backplateRule(String css, String id) {
+    final pattern = '#' +
+        RegExp.escape(id) +
+        r'\s*>\s*\.webui-backplate\s*\{([^}]*)\}';
+    return RegExp(pattern, caseSensitive: false, multiLine: true)
+            .firstMatch(css)
+            ?.group(1) ??
+        '';
+  }
+
   String _classRule(String css, String className) {
     final pattern =
         r'\.' + RegExp.escape(className) + r'\s*\{([^}]*)\}';
@@ -396,6 +441,45 @@ class WebsiteLinkService {
         .firstMatch(rule)
         ?.group(1)
         ?.trim();
+  }
+
+  String? _localAssetPath(String directory, String? source) {
+    if (source == null || source.trim().isEmpty) return null;
+    final uri = Uri.tryParse(source);
+    if (uri?.hasScheme == true) return null;
+    if (p.isAbsolute(source)) return p.normalize(source);
+    return p.normalize(
+      p.join(directory, Uri.decodeComponent(source)),
+    );
+  }
+
+  String? _cssUrl(String? value) {
+    if (value == null || value.trim().isEmpty || value.trim() == 'none') {
+      return null;
+    }
+    return RegExp(
+      r'''url\(["']?([^"')]+)["']?\)''',
+      caseSensitive: false,
+    ).firstMatch(value)?.group(1);
+  }
+
+  String _textMode(String rule) {
+    final whiteSpace = _declaration(rule, 'white-space') ?? '';
+    final height = _declaration(rule, 'height') ?? '';
+    if (whiteSpace == 'pre') return 'fixedSize';
+    if (height == 'auto') return 'fixedWidth';
+    return 'wrap';
+  }
+
+  String _transition(String rule) {
+    final animation = _declaration(rule, 'animation') ?? '';
+    if (animation.contains('webui-slide-left')) return 'slideLeft';
+    if (animation.contains('webui-slide-right')) return 'slideRight';
+    if (animation.contains('webui-slide-up')) return 'slideUp';
+    if (animation.contains('webui-slide-down')) return 'slideDown';
+    if (animation.contains('webui-fade')) return 'fade';
+    if (animation.contains('webui-bounce')) return 'bounce';
+    return 'none';
   }
 
   double? _numberMatch(String source, String pattern) {
@@ -563,6 +647,7 @@ class _ImportedNode {
   final String? href;
   String text = '';
   String? imageSource;
+  String? backplateSource;
   bool hasElementChildren = false;
 }
 

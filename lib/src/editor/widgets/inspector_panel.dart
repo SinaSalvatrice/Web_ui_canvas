@@ -579,7 +579,8 @@ class InspectorPanel extends StatelessWidget {
         const Divider(height: 26),
         _section(context, 'Content'),
         if (element.type != WebElementType.image &&
-            element.type != WebElementType.divider)
+            element.type != WebElementType.divider &&
+            element.type != WebElementType.toggle)
           TextFormField(
             key: ValueKey('text-${element.id}-${element.text}'),
             initialValue: element.text,
@@ -729,7 +730,8 @@ class InspectorPanel extends StatelessWidget {
         const Divider(height: 26),
         _section(context, 'Style'),
         if (element.type != WebElementType.image &&
-            element.type != WebElementType.divider) ...[
+            element.type != WebElementType.divider &&
+            element.type != WebElementType.toggle) ...[
           FontPickerField(
             family: element.fontFamily,
             path: element.fontPath,
@@ -797,9 +799,40 @@ class InspectorPanel extends StatelessWidget {
               DropdownMenuItem(value: 'left', child: Text('Left')),
               DropdownMenuItem(value: 'center', child: Text('Center')),
               DropdownMenuItem(value: 'right', child: Text('Right')),
+              DropdownMenuItem(value: 'justify', child: Text('Justify')),
             ],
             onChanged: (value) {
               if (value != null) _update(element.copyWith(textAlign: value));
+            },
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: element.textMode,
+            decoration: const InputDecoration(labelText: 'Text mode'),
+            items: const [
+              DropdownMenuItem(
+                value: 'fixedSize',
+                child: Text('Fixed size · no wrap'),
+              ),
+              DropdownMenuItem(
+                value: 'wrap',
+                child: Text('Wrap inside box'),
+              ),
+              DropdownMenuItem(
+                value: 'fixedWidth',
+                child: Text('Fixed width · auto height'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              _update(
+                element.copyWith(
+                  textMode: value,
+                  heightMode: value == 'fixedWidth'
+                      ? WebSizeMode.hug
+                      : WebSizeMode.fixed,
+                ),
+              );
             },
           ),
         ],
@@ -812,8 +845,37 @@ class InspectorPanel extends StatelessWidget {
             }
           },
         ),
+        if (element.type != WebElementType.image &&
+            element.type != WebElementType.divider &&
+            element.type != WebElementType.toggle) ...[
+          ColorEditorField(
+            label: 'Text highlight',
+            value: element.textHighlightColor,
+            allowTransparent: true,
+            onChanged: (value) => value == null
+                ? _update(element.copyWith(clearTextHighlightColor: true))
+                : _update(element.copyWith(textHighlightColor: value)),
+          ),
+          ColorEditorField(
+            label: 'Text outline',
+            value: element.textStrokeColor,
+            allowTransparent: true,
+            onChanged: (value) => value == null
+                ? _update(element.copyWith(clearTextStrokeColor: true))
+                : _update(element.copyWith(textStrokeColor: value)),
+          ),
+          _number(
+            'Text outline width',
+            element.textStrokeWidth,
+            (value) => _update(
+              element.copyWith(
+                textStrokeWidth: math.max(0.0, value).toDouble(),
+              ),
+            ),
+          ),
+        ],
         ColorEditorField(
-          label: 'Background',
+          label: 'Background / fill',
           value: element.backgroundColor,
           allowTransparent: true,
           onChanged: (value) => value == null
@@ -836,8 +898,154 @@ class InspectorPanel extends StatelessWidget {
         _number(
           'Corner radius',
           element.borderRadius,
-          (value) => _update(element.copyWith(borderRadius: math.max(0.0, value).toDouble())),
+          (value) => _update(
+            element.copyWith(
+              borderRadius: math.max(0.0, value).toDouble(),
+            ),
+          ),
         ),
+        const Divider(height: 26),
+        _section(context, 'Backplate & mask'),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: const Text('Backplate enabled'),
+          value: element.backplateEnabled && element.backplatePath != null,
+          onChanged: element.backplatePath == null
+              ? null
+              : (value) =>
+                  _update(element.copyWith(backplateEnabled: value)),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: () => _pickDecorationAsset(element, mask: false),
+          icon: const Icon(Icons.layers_outlined),
+          label: Text(
+            element.backplatePath == null
+                ? 'Choose SVG / image backplate'
+                : 'Replace backplate',
+          ),
+        ),
+        if (element.backplatePath != null) ...[
+          Text(
+            element.backplatePath!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          DropdownButtonFormField<String>(
+            initialValue: element.backplateFit,
+            decoration: const InputDecoration(labelText: 'Backplate fit'),
+            items: const [
+              DropdownMenuItem(value: 'cover', child: Text('Cover')),
+              DropdownMenuItem(value: 'contain', child: Text('Contain')),
+              DropdownMenuItem(value: 'fill', child: Text('Fill')),
+              DropdownMenuItem(value: 'none', child: Text('Original')),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                _update(element.copyWith(backplateFit: value));
+              }
+            },
+          ),
+          TextButton.icon(
+            onPressed: () => _update(
+              element.copyWith(
+                clearBackplatePath: true,
+                backplateEnabled: false,
+              ),
+            ),
+            icon: const Icon(Icons.close),
+            label: const Text('Remove backplate'),
+          ),
+        ],
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: const Text('Mask enabled'),
+          subtitle: const Text('Applied to exported HTML/CSS'),
+          value: element.maskEnabled && element.maskPath != null,
+          onChanged: element.maskPath == null
+              ? null
+              : (value) => _update(element.copyWith(maskEnabled: value)),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: () => _pickDecorationAsset(element, mask: true),
+          icon: const Icon(Icons.filter_b_and_w_outlined),
+          label: Text(
+            element.maskPath == null ? 'Choose mask' : 'Replace mask',
+          ),
+        ),
+        if (element.maskPath != null)
+          TextButton.icon(
+            onPressed: () => _update(
+              element.copyWith(
+                clearMaskPath: true,
+                maskEnabled: false,
+              ),
+            ),
+            icon: const Icon(Icons.close),
+            label: const Text('Remove mask'),
+          ),
+        const Divider(height: 26),
+        _section(context, 'Interaction & transition'),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: const Text('Entrance transition'),
+          value: element.transitionEnabled,
+          onChanged: (value) =>
+              _update(element.copyWith(transitionEnabled: value)),
+        ),
+        DropdownButtonFormField<String>(
+          initialValue: element.transition,
+          decoration: const InputDecoration(labelText: 'Transition'),
+          items: const [
+            DropdownMenuItem(value: 'none', child: Text('None')),
+            DropdownMenuItem(value: 'slideLeft', child: Text('Swipe from left')),
+            DropdownMenuItem(value: 'slideRight', child: Text('Swipe from right')),
+            DropdownMenuItem(value: 'slideUp', child: Text('Swipe from top')),
+            DropdownMenuItem(value: 'slideDown', child: Text('Swipe from bottom')),
+            DropdownMenuItem(value: 'fade', child: Text('Fade')),
+            DropdownMenuItem(value: 'bounce', child: Text('Bounce')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              _update(
+                element.copyWith(
+                  transition: value,
+                  transitionEnabled: value != 'none',
+                ),
+              );
+            }
+          },
+        ),
+        _number(
+          'Transition ms',
+          element.transitionDurationMs.toDouble(),
+          (value) => _update(
+            element.copyWith(
+              transitionDurationMs: value.clamp(60, 5000).round(),
+            ),
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: const Text('Press smaller on click'),
+          value: element.pressScaleEnabled,
+          onChanged: (value) =>
+              _update(element.copyWith(pressScaleEnabled: value)),
+        ),
+        if (element.pressScaleEnabled)
+          _number(
+            'Pressed scale %',
+            element.pressScale * 100,
+            (value) => _update(
+              element.copyWith(
+                pressScale: (value / 100).clamp(.5, 1.0).toDouble(),
+              ),
+            ),
+          ),
         const Divider(height: 26),
         _section(context, 'Anchors'),
         Row(
@@ -961,6 +1169,36 @@ class InspectorPanel extends StatelessWidget {
           if (parsed != null) onChanged(parsed);
         },
       ),
+    );
+  }
+
+  Future<void> _pickDecorationAsset(
+    WebElement element, {
+    required bool mask,
+  }) async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: const [
+        'png',
+        'jpg',
+        'jpeg',
+        'webp',
+        'gif',
+        'bmp',
+        'svg',
+      ],
+      dialogTitle: mask ? 'Choose mask' : 'Choose SVG / image backplate',
+    );
+    final path = file?.path;
+    if (path == null) return;
+
+    _update(
+      mask
+          ? element.copyWith(maskPath: path, maskEnabled: true)
+          : element.copyWith(
+              backplatePath: path,
+              backplateEnabled: true,
+            ),
     );
   }
 

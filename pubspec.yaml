@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   file_picker: ^13.1.0
   path: ^1.9.0
+  flutter_svg: ^2.2.1
+  url_launcher: ^6.3.2
   window_manager: ^0.5.2
 
 dev_dependencies:

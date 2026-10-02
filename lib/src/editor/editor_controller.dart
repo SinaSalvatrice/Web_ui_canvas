@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
+import '../model/asset_library.dart';
 import '../model/layout.dart';
 import '../model/page_layout_engine.dart';
 import '../model/responsive.dart';
@@ -331,12 +332,32 @@ class EditorController extends ChangeNotifier {
       return;
     }
 
+    final nextWidth = width ?? resolved.width;
+    final nextHeight = height ?? resolved.height;
+    var nextX = x ?? resolved.x;
+    var nextY = y ?? resolved.y;
+
+    if (x == null && width != null) {
+      nextX = switch (resolved.anchorX) {
+        'right' => resolved.x + resolved.width - nextWidth,
+        'center' => resolved.x + (resolved.width - nextWidth) / 2,
+        _ => resolved.x,
+      };
+    }
+    if (y == null && height != null) {
+      nextY = switch (resolved.anchorY) {
+        'bottom' => resolved.y + resolved.height - nextHeight,
+        'center' => resolved.y + (resolved.height - nextHeight) / 2,
+        _ => resolved.y,
+      };
+    }
+
     _writeResolvedGeometry(
       raw,
-      x: x ?? resolved.x,
-      y: y ?? resolved.y,
-      width: width ?? resolved.width,
-      height: height ?? resolved.height,
+      x: nextX,
+      y: nextY,
+      width: nextWidth,
+      height: nextHeight,
       commit: commit,
     );
   }
@@ -611,6 +632,114 @@ class EditorController extends ChangeNotifier {
         marginLeft: left,
       ),
     );
+  }
+
+  void fitPageToContent({double padding = 48}) {
+    final elements = resolvedPageElements.where((element) => element.visible);
+    if (elements.isEmpty) return;
+
+    final maxRight = elements
+        .map((element) => element.x + element.width)
+        .reduce(math.max);
+    final maxBottom = elements
+        .map((element) => element.y + element.height)
+        .reduce(math.max);
+
+    setPageSize(
+      math.max(320.0, maxRight + padding).toDouble(),
+      math.max(320.0, maxBottom + padding).toDouble(),
+    );
+  }
+
+  void setAssetLibraryEnabled(bool value) {
+    _project = _project.copyWith(assetLibraryEnabled: value);
+    _pushHistory();
+    notifyListeners();
+  }
+
+  void addLibraryAsset(AssetLibraryItem item) {
+    final items = [..._project.assetLibrary];
+    final existing = items.indexWhere((candidate) => candidate.id == item.id);
+    if (existing >= 0) {
+      items[existing] = item;
+    } else {
+      items.add(item);
+    }
+    _project = _project.copyWith(assetLibrary: items);
+    _pushHistory();
+    notifyListeners();
+  }
+
+  void updateLibraryAsset(AssetLibraryItem item) {
+    final items = _project.assetLibrary
+        .map((candidate) => candidate.id == item.id ? item : candidate)
+        .toList(growable: false);
+    _project = _project.copyWith(assetLibrary: items);
+    _pushHistory();
+    notifyListeners();
+  }
+
+  void removeLibraryAsset(String id) {
+    final items = _project.assetLibrary
+        .where((candidate) => candidate.id != id)
+        .toList(growable: false);
+    _project = _project.copyWith(assetLibrary: items);
+    _pushHistory();
+    notifyListeners();
+  }
+
+  void applyLibraryAsset(AssetLibraryItem item) {
+    if (!item.enabled || !_project.assetLibraryEnabled) return;
+    final selected = selectedElement;
+    if (selected == null) return;
+
+    switch (item.category) {
+      case AssetCategory.fonts:
+        final family = item.label.trim().isEmpty
+            ? item.path.split(RegExp(r'[\\/]')).last.split('.').first
+            : item.label;
+        updateElement(
+          selected.copyWith(
+            fontFamily: family,
+            fontPath: item.path,
+          ),
+        );
+        break;
+      case AssetCategory.masks:
+        updateElement(
+          selected.copyWith(
+            maskPath: item.path,
+            maskEnabled: true,
+          ),
+        );
+        break;
+      case AssetCategory.icons:
+      case AssetCategory.frames:
+      case AssetCategory.textures:
+      case AssetCategory.objects:
+        if (selected.type == WebElementType.image &&
+            (item.category == AssetCategory.icons ||
+                item.category == AssetCategory.objects)) {
+          updateElement(
+            selected.copyWith(
+              imagePath: item.path,
+              imagePositionX: 0,
+              imagePositionY: 0,
+              imageScale: 1,
+            ),
+          );
+        } else {
+          updateElement(
+            selected.copyWith(
+              backplatePath: item.path,
+              backplateEnabled: true,
+              backplateFit:
+                  item.category == AssetCategory.frames ? 'contain' : 'cover',
+            ),
+          );
+        }
+        break;
+    }
   }
 
   void select(String? id) => selectOnly(id);
