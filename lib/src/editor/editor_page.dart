@@ -1,22 +1,27 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../export/html_exporter.dart';
 import '../model/responsive.dart';
+import '../services/browser_preview_service.dart';
 import '../services/font_catalog.dart';
 import '../services/project_storage.dart';
 import '../services/website_link_service.dart';
 import 'editor_controller.dart';
+import 'widgets/asset_library_panel.dart';
 import 'widgets/canvas_view.dart';
 import 'widgets/component_library.dart';
 import 'widgets/inspector_panel.dart';
 import 'widgets/layers_panel.dart';
 
-enum _MobilePanel { elements, properties, layers }
+enum _MobilePanel { elements, properties, layers, library }
 
 class EditorPage extends StatefulWidget {
   const EditorPage({super.key});
@@ -30,14 +35,18 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
   final ProjectStorage _storage = const ProjectStorage();
   final WebsiteLinkService _websiteLinkService = const WebsiteLinkService();
   final HtmlExporter _exporter = const HtmlExporter();
+  final BrowserPreviewService _browserPreviewService =
+      const BrowserPreviewService();
   final CanvasViewportController _viewportController = CanvasViewportController();
   final FocusNode _shortcuts = FocusNode(debugLabel: 'web-ui-canvas-shortcuts');
+  final GlobalKey _canvasExportKey = GlobalKey();
 
   String? _projectPath;
   late String _cleanFingerprint;
   bool _previewMode = false;
   bool _busy = false;
   bool _handlingWindowClose = false;
+  bool _pngExporting = false;
   int _rightTab = 0;
 
   bool get _isDirty => _controller.projectFingerprint != _cleanFingerprint;
@@ -113,7 +122,8 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                 child: CanvasView(
                   controller: _controller,
                   viewportController: _viewportController,
-                  previewMode: _previewMode,
+                  previewMode: _previewMode || _pngExporting,
+                  exportKey: _canvasExportKey,
                 ),
               ),
               const VerticalDivider(width: 1),
@@ -133,6 +143,11 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                           label: Text('Layers'),
                           icon: Icon(Icons.layers_outlined, size: 17),
                         ),
+                        ButtonSegment(
+                          value: 2,
+                          label: Text('Library'),
+                          icon: Icon(Icons.collections_bookmark_outlined, size: 17),
+                        ),
                       ],
                       selected: {_rightTab},
                       onSelectionChanged: (selection) {
@@ -141,9 +156,11 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                     ),
                     const Divider(height: 1),
                     Expanded(
-                      child: _rightTab == 0
-                          ? InspectorPanel(controller: _controller)
-                          : LayersPanel(controller: _controller),
+                      child: switch (_rightTab) {
+                        0 => InspectorPanel(controller: _controller),
+                        1 => LayersPanel(controller: _controller),
+                        _ => AssetLibraryPanel(controller: _controller),
+                      },
                     ),
                   ],
                 ),
@@ -164,7 +181,8 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
           child: CanvasView(
             controller: _controller,
             viewportController: _viewportController,
-            previewMode: _previewMode,
+            previewMode: _previewMode || _pngExporting,
+            exportKey: _canvasExportKey,
           ),
         ),
         const Divider(height: 1),
@@ -275,6 +293,27 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                     title: Text('Reset view'),
                   ),
                 ),
+                const PopupMenuItem(
+                  value: 'fitContent',
+                  child: ListTile(
+                    leading: Icon(Icons.fit_screen_outlined),
+                    title: Text('Fit page to content'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'browserPreview',
+                  child: ListTile(
+                    leading: Icon(Icons.open_in_browser),
+                    title: Text('Preview in browser'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'pngExport',
+                  child: ListTile(
+                    leading: Icon(Icons.image_outlined),
+                    title: Text('Export PNG'),
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'export',
                   child: ListTile(
@@ -329,6 +368,13 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                 onPressed: () => _showMobilePanel(_MobilePanel.layers),
               ),
             ),
+            Expanded(
+              child: _mobileToolButton(
+                icon: Icons.collections_bookmark_outlined,
+                label: 'Library',
+                onPressed: () => _showMobilePanel(_MobilePanel.library),
+              ),
+            ),
           ],
         ),
       ),
@@ -376,6 +422,8 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                 _MobilePanel.properties =>
                   InspectorPanel(controller: _controller),
                 _MobilePanel.layers => LayersPanel(controller: _controller),
+                _MobilePanel.library =>
+                  AssetLibraryPanel(controller: _controller),
               };
             },
           ),
@@ -423,6 +471,16 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
         break;
       case 'resetView':
         _viewportController.reset();
+        break;
+      case 'fitContent':
+        _controller.fitPageToContent();
+        _viewportController.reset();
+        break;
+      case 'browserPreview':
+        unawaited(_previewInBrowser());
+        break;
+      case 'pngExport':
+        unawaited(_exportPng());
         break;
       case 'export':
         unawaited(_export());
@@ -565,6 +623,26 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
               avatar: const Icon(Icons.play_arrow, size: 18),
               selected: _previewMode,
               onSelected: (value) => setState(() => _previewMode = value),
+            ),
+            IconButton(
+              tooltip: 'Preview in browser',
+              onPressed: _busy ? null : _previewInBrowser,
+              icon: const Icon(Icons.open_in_browser),
+            ),
+            IconButton(
+              tooltip: 'Fit page to content',
+              onPressed: _busy
+                  ? null
+                  : () {
+                      _controller.fitPageToContent();
+                      _viewportController.reset();
+                    },
+              icon: const Icon(Icons.fit_screen_outlined),
+            ),
+            IconButton(
+              tooltip: 'Export PNG',
+              onPressed: _busy ? null : _exportPng,
+              icon: const Icon(Icons.image_outlined),
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
@@ -901,6 +979,68 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
     }
   }
 
+  Future<void> _previewInBrowser() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final path = await _browserPreviewService.open(_controller.project);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Browser preview: $path')),
+      );
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _exportPng() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _pngExporting = true;
+    });
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      final render = _canvasExportKey.currentContext?.findRenderObject();
+      if (render is! RenderRepaintBoundary) {
+        throw StateError('Canvas is not ready for PNG export.');
+      }
+
+      final image = await render.toImage(pixelRatio: 1);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      if (data == null) {
+        throw StateError('PNG encoding failed.');
+      }
+
+      final uri = await FilePicker.saveFile(
+        dialogTitle: 'Export canvas as PNG',
+        fileName: 'web-ui-canvas.png',
+        type: FileType.custom,
+        allowedExtensions: const ['png'],
+        mimeType: 'image/png',
+        bytes: data.buffer.asUint8List(),
+      );
+      if (uri != null && mounted) {
+        final label = uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PNG exported: $label')),
+        );
+      }
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _pngExporting = false;
+        });
+      }
+    }
+  }
+
   Future<void> _export() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -921,8 +1061,18 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
         }
         final prefix =
             linkedPath == null ? 'Exported to ' : 'Website updated: ';
+        final backup = result.backupDirectory?.path;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(prefix + result.directory.path)),
+          SnackBar(
+            content: Text(
+              backup == null
+                  ? prefix + result.directory.path
+                  : prefix +
+                      result.directory.path +
+                      ' · backup: ' +
+                      backup,
+            ),
+          ),
         );
       }
     } catch (error) {
