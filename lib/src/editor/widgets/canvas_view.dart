@@ -253,13 +253,17 @@ class _CanvasViewState extends State<CanvasView> {
                             child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: Color(page.backgroundColor),
-                              border: Border.all(color: Colors.black26),
-                              boxShadow: const [
-                                BoxShadow(
-                                  blurRadius: 24,
-                                  color: Color(0x22000000),
-                                ),
-                              ],
+                              border: widget.previewMode
+                                  ? null
+                                  : Border.all(color: Colors.black26),
+                              boxShadow: widget.previewMode
+                                  ? const []
+                                  : const [
+                                      BoxShadow(
+                                        blurRadius: 24,
+                                        color: Color(0x22000000),
+                                      ),
+                                    ],
                             ),
                             child: Stack(
                               clipBehavior: Clip.none,
