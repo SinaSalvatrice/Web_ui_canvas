@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -27,10 +28,15 @@ class HtmlExportResult {
 class HtmlExporter {
   const HtmlExporter();
 
-  Future<HtmlExportResult?> export(WebProject project) async {
-    final chosen = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Choose export folder',
-    );
+  Future<HtmlExportResult?> export(
+    WebProject project, {
+    String? targetDirectory,
+  }) async {
+    final chosen = targetDirectory ??
+        project.linkedWebsitePath ??
+        await FilePicker.getDirectoryPath(
+          dialogTitle: 'Choose export folder',
+        );
     if (chosen == null) return null;
 
     final root = Directory(chosen);
@@ -47,6 +53,12 @@ class HtmlExporter {
 
     await htmlFile.writeAsString(_html(project, page, assetMap), flush: true);
     await cssFile.writeAsString(_css(page, assetMap), flush: true);
+
+    final linkedProject = project.copyWith(linkedWebsitePath: root.path);
+    final projectFile = File(p.join(root.path, 'web-ui-canvas.webui'));
+    final projectText =
+        const JsonEncoder.withIndent('  ').convert(linkedProject.toJson());
+    await projectFile.writeAsString(projectText + '\n', flush: true);
 
     return HtmlExportResult(
       directory: root,
