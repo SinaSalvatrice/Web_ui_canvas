@@ -42,6 +42,9 @@ if not exist "windows\CMakeLists.txt" (
   echo [2/7] Windows-Host vorhanden.
 )
 
+powershell -NoProfile -ExecutionPolicy Bypass -File "tool\apply_app_icon.ps1" -Letter W
+if errorlevel 1 goto :fail
+
 echo [3/7] Pakete laden...
 call flutter pub get
 if errorlevel 1 goto :fail
