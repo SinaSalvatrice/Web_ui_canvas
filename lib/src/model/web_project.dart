@@ -1,3 +1,4 @@
+import 'asset_library.dart';
 import 'web_page.dart';
 
 class WebProject {
@@ -8,9 +9,11 @@ class WebProject {
     required this.activePageId,
     required this.pages,
     this.linkedWebsitePath,
+    this.assetLibraryEnabled = true,
+    this.assetLibrary = const [],
   });
 
-  static const currentSchemaVersion = 4;
+  static const currentSchemaVersion = 5;
 
   final int schemaVersion;
   final String id;
@@ -18,6 +21,8 @@ class WebProject {
   final String activePageId;
   final List<WebPage> pages;
   final String? linkedWebsitePath;
+  final bool assetLibraryEnabled;
+  final List<AssetLibraryItem> assetLibrary;
 
   factory WebProject.empty() {
     const page = WebPage(
@@ -42,6 +47,8 @@ class WebProject {
     List<WebPage>? pages,
     String? linkedWebsitePath,
     bool clearLinkedWebsitePath = false,
+    bool? assetLibraryEnabled,
+    List<AssetLibraryItem>? assetLibrary,
   }) {
     return WebProject(
       schemaVersion: schemaVersion,
@@ -52,6 +59,8 @@ class WebProject {
       linkedWebsitePath: clearLinkedWebsitePath
           ? null
           : (linkedWebsitePath ?? this.linkedWebsitePath),
+      assetLibraryEnabled: assetLibraryEnabled ?? this.assetLibraryEnabled,
+      assetLibrary: assetLibrary ?? this.assetLibrary,
     );
   }
 
@@ -64,6 +73,9 @@ class WebProject {
         'pages': pages.map((page) => page.toJson()).toList(),
         if (linkedWebsitePath != null)
           'linkedWebsitePath': linkedWebsitePath,
+        'assetLibraryEnabled': assetLibraryEnabled,
+        if (assetLibrary.isNotEmpty)
+          'assetLibrary': assetLibrary.map((item) => item.toJson()).toList(),
       };
 
   factory WebProject.fromJson(Map<String, Object?> json) {
@@ -82,6 +94,12 @@ class WebProject {
           )
           .toList(),
       linkedWebsitePath: json['linkedWebsitePath'] as String?,
+      assetLibraryEnabled: json['assetLibraryEnabled'] as bool? ?? true,
+      assetLibrary: ((json['assetLibrary'] as List?) ?? const [])
+          .map((item) => AssetLibraryItem.fromJson(
+                Map<String, Object?>.from(item as Map),
+              ))
+          .toList(),
     );
   }
 }
