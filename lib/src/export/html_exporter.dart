@@ -196,7 +196,7 @@ $body
           ? '<a id="$id" class="webui-element" href="${_escapeAttribute(element.href)}">$backplate$content</a>'
           : '<button id="$id" class="webui-element" type="button">$backplate$content</button>',
       WebElementType.input =>
-        '<label id="$id" class="webui-element">$backplate<input class="webui-input-control" placeholder="${_escapeAttribute(element.text)}"></label>',
+        '<label id="$id" class="webui-element webui-input-frame">$backplate<input class="webui-input-control" placeholder="${_escapeAttribute(element.text)}"></label>',
       WebElementType.toggle =>
         '<button id="$id" class="webui-element webui-toggle" type="button" role="switch" aria-checked="false" data-webui-toggle>$backplate<span class="webui-toggle-knob"></span></button>',
       WebElementType.navigation =>
