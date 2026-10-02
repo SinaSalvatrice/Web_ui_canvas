@@ -85,6 +85,7 @@ class _ElementTile extends StatelessWidget {
         WebElementType.section => Icons.web_asset_outlined,
         WebElementType.navigation => Icons.menu,
         WebElementType.input => Icons.input,
+        WebElementType.toggle => Icons.toggle_on_outlined,
         WebElementType.card => Icons.view_agenda_outlined,
       };
 }
