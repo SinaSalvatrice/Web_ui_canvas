@@ -820,24 +820,33 @@ class _CanvasViewState extends State<CanvasView> {
     if (element.type == WebElementType.image) {
       final path = element.imagePath;
       final file = path == null ? null : File(path);
+      final alignment = Alignment(
+        element.imagePositionX.clamp(-1.0, 1.0).toDouble(),
+        element.imagePositionY.clamp(-1.0, 1.0).toDouble(),
+      );
       content = file != null && file.existsSync()
           ? ClipRect(
               child: Transform.scale(
                 scale: element.imageScale.clamp(.25, 5.0).toDouble(),
                 alignment: Alignment.center,
-                child: Image.file(
-                  file,
-                  width: double.infinity,
-                  height: double.infinity,
-                  fit: _boxFit(element.imageFit),
-                  alignment: Alignment(
-                    element.imagePositionX.clamp(-1.0, 1.0).toDouble(),
-                    element.imagePositionY.clamp(-1.0, 1.0).toDouble(),
-                  ),
-                  filterQuality: FilterQuality.high,
-                  isAntiAlias: true,
-                  errorBuilder: (_, __, ___) => _imagePlaceholder(),
-                ),
+                child: path!.toLowerCase().endsWith('.svg')
+                    ? SvgPicture.file(
+                        file,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: _boxFit(element.imageFit),
+                        alignment: alignment,
+                      )
+                    : Image.file(
+                        file,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: _boxFit(element.imageFit),
+                        alignment: alignment,
+                        filterQuality: FilterQuality.high,
+                        isAntiAlias: true,
+                        errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                      ),
               ),
             )
           : _imagePlaceholder();
