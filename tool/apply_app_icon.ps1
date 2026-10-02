@@ -1,10 +1,10 @@
-$ErrorActionPreference = "Stop"
-
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("A", "W")]
     [string]$Letter
 )
+
+$ErrorActionPreference = "Stop"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 
@@ -83,7 +83,7 @@ function New-RoundedRectanglePath {
     )
 
     $diameter = $Radius * 2
-    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
     $path.AddArc($Rect.X, $Rect.Y, $diameter, $diameter, 180, 90)
     $path.AddArc($Rect.Right - $diameter, $Rect.Y, $diameter, $diameter, 270, 90)
     $path.AddArc($Rect.Right - $diameter, $Rect.Bottom - $diameter, $diameter, $diameter, 0, 90)
@@ -106,18 +106,18 @@ function Apply-WindowsIcon {
     Add-Type -AssemblyName System.Drawing
 
     $size = 256
-    $bitmap = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $bitmap = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
     $graphics.Clear([System.Drawing.Color]::Transparent)
 
-    $rect = New-Object System.Drawing.RectangleF(3, 3, 250, 250)
+    $rect = [System.Drawing.RectangleF]::new(3, 3, 250, 250)
     $path = New-RoundedRectanglePath -Rect $rect -Radius 42
 
     $start = [System.Drawing.Color]::FromArgb(255, 91, 98, 109)
     $finish = [System.Drawing.Color]::FromArgb(255, 18, 21, 26)
-    $gradient = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+    $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
         $rect,
         $start,
         $finish,
@@ -125,24 +125,24 @@ function Apply-WindowsIcon {
     )
     $graphics.FillPath($gradient, $path)
 
-    $border = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(90, 210, 215, 222), 2)
+    $border = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(90, 210, 215, 222), 2)
     $graphics.DrawPath($border, $path)
 
     $fontSize = if ($Letter -eq "A") { 166 } else { 152 }
     try {
-        $font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+        $font = [System.Drawing.Font]::new("Segoe UI", [single]$fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     } catch {
-        $font = New-Object System.Drawing.Font("Arial", $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+        $font = [System.Drawing.Font]::new("Arial", [single]$fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     }
 
-    $format = New-Object System.Drawing.StringFormat
+    $format = [System.Drawing.StringFormat]::new()
     $format.Alignment = [System.Drawing.StringAlignment]::Center
     $format.LineAlignment = [System.Drawing.StringAlignment]::Center
 
-    $shadowBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(75, 0, 0, 0))
-    $whiteBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 250, 251, 253))
-    $textRectShadow = New-Object System.Drawing.RectangleF(2, 10, 256, 246)
-    $textRect = New-Object System.Drawing.RectangleF(0, 7, 256, 246)
+    $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(75, 0, 0, 0))
+    $whiteBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 250, 251, 253))
+    $textRectShadow = [System.Drawing.RectangleF]::new(2, 10, 256, 246)
+    $textRect = [System.Drawing.RectangleF]::new(0, 7, 256, 246)
     $graphics.DrawString($Letter, $font, $shadowBrush, $textRectShadow, $format)
     $graphics.DrawString($Letter, $font, $whiteBrush, $textRect, $format)
 
