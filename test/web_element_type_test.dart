@@ -15,6 +15,7 @@ void main() {
         'Section',
         'Navigation',
         'Input',
+        'Switch',
         'Card',
       ],
     );
