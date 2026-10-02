@@ -12,18 +12,28 @@ void main() {
 
     controller.alignSelection(SelectionAlignment.left);
     expect(controller.selectedElement!.x, 0);
+    expect(controller.selectedElement!.anchorX, 'left');
 
     controller.alignSelection(SelectionAlignment.horizontalCenter);
     expect(
       controller.selectedElement!.x,
       closeTo((page.width - element.width) / 2, .001),
     );
+    expect(controller.selectedElement!.anchorX, 'center');
+
+    controller.alignSelection(SelectionAlignment.right);
+    expect(
+      controller.selectedElement!.x + controller.selectedElement!.width,
+      closeTo(page.width, .001),
+    );
+    expect(controller.selectedElement!.anchorX, 'right');
 
     controller.alignSelection(SelectionAlignment.bottom);
     expect(
       controller.selectedElement!.y,
       closeTo(page.height - element.height, .001),
     );
+    expect(controller.selectedElement!.anchorY, 'bottom');
   });
 
   test('multiple selection aligns inside shared selection bounds', () {
