@@ -248,7 +248,9 @@ class _CanvasViewState extends State<CanvasView> {
                           onTap: widget.previewMode
                               ? null
                               : () => controller.select(null),
-                          child: DecoratedBox(
+                          child: RepaintBoundary(
+                            key: widget.exportKey,
+                            child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: Color(page.backgroundColor),
                               border: Border.all(color: Colors.black26),
@@ -302,6 +304,7 @@ class _CanvasViewState extends State<CanvasView> {
                                   ),
                               ],
                             ),
+                          ),
                           ),
                         ),
                       ),
