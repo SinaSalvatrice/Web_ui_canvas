@@ -7,15 +7,17 @@ class WebProject {
     required this.name,
     required this.activePageId,
     required this.pages,
+    this.linkedWebsitePath,
   });
 
-  static const currentSchemaVersion = 3;
+  static const currentSchemaVersion = 4;
 
   final int schemaVersion;
   final String id;
   final String name;
   final String activePageId;
   final List<WebPage> pages;
+  final String? linkedWebsitePath;
 
   factory WebProject.empty() {
     const page = WebPage(
@@ -38,6 +40,8 @@ class WebProject {
     String? name,
     String? activePageId,
     List<WebPage>? pages,
+    String? linkedWebsitePath,
+    bool clearLinkedWebsitePath = false,
   }) {
     return WebProject(
       schemaVersion: schemaVersion,
@@ -45,6 +49,9 @@ class WebProject {
       name: name ?? this.name,
       activePageId: activePageId ?? this.activePageId,
       pages: pages ?? this.pages,
+      linkedWebsitePath: clearLinkedWebsitePath
+          ? null
+          : (linkedWebsitePath ?? this.linkedWebsitePath),
     );
   }
 
@@ -55,6 +62,8 @@ class WebProject {
         'name': name,
         'activePageId': activePageId,
         'pages': pages.map((page) => page.toJson()).toList(),
+        if (linkedWebsitePath != null)
+          'linkedWebsitePath': linkedWebsitePath,
       };
 
   factory WebProject.fromJson(Map<String, Object?> json) {
@@ -72,6 +81,7 @@ class WebProject {
             (item) => WebPage.fromJson(Map<String, Object?>.from(item as Map)),
           )
           .toList(),
+      linkedWebsitePath: json['linkedWebsitePath'] as String?,
     );
   }
 }
