@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
+import '../model/responsive.dart';
 import '../model/web_element.dart';
 import '../model/web_page.dart';
 import '../model/web_project.dart';
@@ -527,9 +528,9 @@ class WebsiteLinkService {
     ).firstMatch(source);
     if (rgba == null) return null;
 
-    final red = int.parse(rgba.group(1)!).clamp(0, 255);
-    final green = int.parse(rgba.group(2)!).clamp(0, 255);
-    final blue = int.parse(rgba.group(3)!).clamp(0, 255);
+    final red = int.parse(rgba.group(1)!).clamp(0, 255).toInt();
+    final green = int.parse(rgba.group(2)!).clamp(0, 255).toInt();
+    final blue = int.parse(rgba.group(3)!).clamp(0, 255).toInt();
     final alpha = ((double.tryParse(rgba.group(4) ?? '1') ?? 1)
                 .clamp(0.0, 1.0) *
             255)
