@@ -160,16 +160,15 @@ class _AssetLibraryPanelState extends State<AssetLibraryPanel> {
     if (category == null || !mounted) return;
 
     final result = await FilePicker.pickFiles(
-      allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: category == AssetCategory.fonts
           ? const ['ttf', 'otf']
           : const ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'],
       dialogTitle: 'Add ${category.label.toLowerCase()}',
     );
-    if (result == null) return;
+    if (result.isEmpty) return;
 
-    for (final file in result.files) {
+    for (final file in result) {
       final path = file.path;
       if (path == null || !File(path).existsSync()) continue;
       final normalized = p.normalize(path);
