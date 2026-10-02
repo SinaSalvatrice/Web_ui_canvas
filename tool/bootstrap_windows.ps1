@@ -23,5 +23,7 @@ if (-not (Test-Path $destination)) {
     Write-Host "Windows host already exists - left untouched."
 }
 
+& (Join-Path $PSScriptRoot "apply_app_icon.ps1") -Letter W
+
 Remove-Item $temp -Recurse -Force
 Write-Host "Done. Run flutter pub get."
