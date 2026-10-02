@@ -94,8 +94,66 @@ class _CanvasViewState extends State<CanvasView> {
   bool _didInitialFit = false;
   bool _touchElementInteraction = false;
   Offset? _touchInteractionPoint;
+  Offset? _objectDragPointerStart;
+  Offset? _objectDragElementStart;
+  Offset? _cropDragPoint;
 
   double get _scale => widget.viewportController.zoom;
+
+  WebElement? _resolvedElementById(String id) {
+    for (final candidate in widget.controller.resolvedPageElements) {
+      if (candidate.id == id) return candidate;
+    }
+    return null;
+  }
+
+  void _beginObjectDrag(WebElement element, Offset globalPosition) {
+    final point = _pagePointFromGlobal(globalPosition);
+    if (point == null) return;
+    if (widget.controller.isCropping(element.id)) {
+      _cropDragPoint = point;
+      _objectDragPointerStart = null;
+      _objectDragElementStart = null;
+      return;
+    }
+    final current = _resolvedElementById(element.id) ?? element;
+    _objectDragPointerStart = point;
+    _objectDragElementStart = Offset(current.x, current.y);
+    _cropDragPoint = null;
+  }
+
+  void _updateObjectDrag(WebElement element, Offset globalPosition) {
+    final point = _pagePointFromGlobal(globalPosition);
+    if (point == null) return;
+
+    if (widget.controller.isCropping(element.id)) {
+      final previous = _cropDragPoint;
+      _cropDragPoint = point;
+      if (previous == null) return;
+      final delta = point - previous;
+      widget.controller.panImage(element.id, delta.dx, delta.dy);
+      return;
+    }
+
+    final pointerStart = _objectDragPointerStart;
+    final elementStart = _objectDragElementStart;
+    final current = _resolvedElementById(element.id);
+    if (pointerStart == null || elementStart == null || current == null) return;
+
+    final pointerDelta = point - pointerStart;
+    final target = elementStart + pointerDelta;
+    widget.controller.moveBy(
+      element.id,
+      target.dx - current.x,
+      target.dy - current.y,
+    );
+  }
+
+  void _endObjectDrag() {
+    _objectDragPointerStart = null;
+    _objectDragElementStart = null;
+    _cropDragPoint = null;
+  }
 
   void _beginTouchElementInteraction(Offset globalPosition) {
     _touchInteractionPoint = _pagePointFromGlobal(globalPosition);
@@ -341,32 +399,23 @@ class _CanvasViewState extends State<CanvasView> {
                       controller.selectOnly(element.id);
                     }
                   }
+                  _beginObjectDrag(element, details.globalPosition);
                 },
           onPanUpdate: widget.previewMode || element.locked
               ? null
-              : (details) {
-                  final delta = touch
-                      ? _touchCanvasDelta(details.globalPosition)
-                      : Offset(
-                          details.delta.dx / _scale,
-                          details.delta.dy / _scale,
-                        );
-                  if (delta == null) return;
-                  if (controller.isCropping(element.id)) {
-                    controller.panImage(element.id, delta.dx, delta.dy);
-                  } else {
-                    controller.moveBy(element.id, delta.dx, delta.dy);
-                  }
-                },
+              : (details) =>
+                  _updateObjectDrag(element, details.globalPosition),
           onPanEnd: widget.previewMode || element.locked
               ? null
               : (_) {
+                  _endObjectDrag();
                   if (touch) _endTouchElementInteraction();
                   controller.commitLiveEdit();
                 },
           onPanCancel: widget.previewMode || element.locked
               ? null
               : () {
+                  _endObjectDrag();
                   if (touch) _endTouchElementInteraction();
                   controller.commitLiveEdit();
                 },
