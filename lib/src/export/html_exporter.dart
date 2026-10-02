@@ -289,6 +289,7 @@ $body
         WebBreakpoint.desktop,
         rawById,
         desktopLayout,
+        assets,
       );
       if (element.backplateEnabled && assets[element.backplatePath] != null) {
         buffer
@@ -332,6 +333,7 @@ $body
           breakpoint,
           rawById,
           layout,
+          assets,
           indent: '  ',
         );
       }
@@ -354,7 +356,8 @@ $body
     WebElement element,
     WebBreakpoint breakpoint,
     Map<String, WebElement> rawById,
-    Map<String, WebElement> layout, {
+    Map<String, WebElement> layout,
+    Map<String, String> assets, {
     String indent = '',
   }) {
     final resolved = layout[element.id] ??
