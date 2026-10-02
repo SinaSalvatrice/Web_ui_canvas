@@ -275,11 +275,15 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                     title: Text('Reset view'),
                   ),
                 ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'export',
                   child: ListTile(
-                    leading: Icon(Icons.output),
-                    title: Text('Export HTML/CSS'),
+                    leading: const Icon(Icons.output),
+                    title: Text(
+                      _controller.project.linkedWebsitePath == null
+                          ? 'Export HTML/CSS'
+                          : 'Update website',
+                    ),
                   ),
                 ),
               ],
