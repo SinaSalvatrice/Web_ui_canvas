@@ -9,6 +9,7 @@ import '../export/html_exporter.dart';
 import '../model/responsive.dart';
 import '../services/font_catalog.dart';
 import '../services/project_storage.dart';
+import '../services/website_link_service.dart';
 import 'editor_controller.dart';
 import 'widgets/canvas_view.dart';
 import 'widgets/component_library.dart';
@@ -27,6 +28,7 @@ class EditorPage extends StatefulWidget {
 class _EditorPageState extends State<EditorPage> with WindowListener {
   final EditorController _controller = EditorController();
   final ProjectStorage _storage = const ProjectStorage();
+  final WebsiteLinkService _websiteLinkService = const WebsiteLinkService();
   final HtmlExporter _exporter = const HtmlExporter();
   final CanvasViewportController _viewportController = CanvasViewportController();
   final FocusNode _shortcuts = FocusNode(debugLabel: 'web-ui-canvas-shortcuts');
@@ -215,6 +217,17 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
                     title: Text('Save project'),
                   ),
                 ),
+                PopupMenuItem(
+                  value: 'linkWebsite',
+                  child: ListTile(
+                    leading: const Icon(Icons.link),
+                    title: Text(
+                      _controller.project.linkedWebsitePath == null
+                          ? 'Link existing website'
+                          : 'Relink website',
+                    ),
+                  ),
+                ),
                 const PopupMenuDivider(),
                 CheckedPopupMenuItem(
                   value: 'grid',
@@ -377,6 +390,9 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
       case 'save':
         unawaited(_save());
         break;
+      case 'linkWebsite':
+        unawaited(_linkWebsite());
+        break;
       case 'grid':
         setState(() => _controller.gridEnabled = !_controller.gridEnabled);
         break;
@@ -432,6 +448,17 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
               tooltip: 'Save',
               onPressed: _busy ? null : _save,
               icon: const Icon(Icons.save_outlined),
+            ),
+            IconButton(
+              tooltip: _controller.project.linkedWebsitePath == null
+                  ? 'Link existing website'
+                  : 'Relink website',
+              onPressed: _busy ? null : _linkWebsite,
+              icon: Icon(
+                _controller.project.linkedWebsitePath == null
+                    ? Icons.link
+                    : Icons.link_off_outlined,
+              ),
             ),
             const SizedBox(width: 4),
             IconButton(
@@ -539,7 +566,11 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
             FilledButton.icon(
               onPressed: _busy ? null : _export,
               icon: const Icon(Icons.output),
-              label: const Text('Export HTML/CSS'),
+              label: Text(
+                _controller.project.linkedWebsitePath == null
+                    ? 'Export HTML/CSS'
+                    : 'Update website',
+              ),
             ),
           ],
         ),
@@ -702,6 +733,48 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
     return KeyEventResult.ignored;
   }
 
+  Future<void> _linkWebsite() async {
+    if (_busy) return;
+    if (!await _resolveUnsavedChanges()) return;
+    if (!mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final linked = await _websiteLinkService.linkExistingWebsite();
+      if (linked == null) return;
+
+      for (final page in linked.project.pages) {
+        for (final element in page.elements) {
+          await FontCatalog.instance.ensureLoaded(
+            family: element.fontFamily,
+            path: element.fontPath,
+          );
+        }
+      }
+
+      _controller.replaceProject(linked.project);
+      _viewportController.reset();
+      if (!mounted) return;
+      setState(() {
+        _projectPath = linked.projectPath;
+        _cleanFingerprint = _controller.projectFingerprint;
+      });
+
+      final message = linked.importedFromHtml
+          ? 'Website linked · ' +
+              linked.importedElementCount.toString() +
+              ' editable elements imported'
+          : 'Linked website project loaded';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _open() async {
     if (_busy) return;
     if (!await _resolveUnsavedChanges()) return;
@@ -828,10 +901,24 @@ class _EditorPageState extends State<EditorPage> with WindowListener {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final result = await _exporter.export(_controller.project);
+      final linkedPath = _controller.project.linkedWebsitePath;
+      final result = await _exporter.export(
+        _controller.project,
+        targetDirectory: linkedPath,
+      );
       if (result != null && mounted) {
+        if (linkedPath != null) {
+          setState(() {
+            _projectPath = result.directory.path +
+                Platform.pathSeparator +
+                'web-ui-canvas.webui';
+            _cleanFingerprint = _controller.projectFingerprint;
+          });
+        }
+        final prefix =
+            linkedPath == null ? 'Exported to ' : 'Website updated: ';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Exported to ${result.directory.path}')),
+          SnackBar(content: Text(prefix + result.directory.path)),
         );
       }
     } catch (error) {
