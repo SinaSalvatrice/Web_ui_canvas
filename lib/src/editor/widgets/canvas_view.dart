@@ -92,8 +92,30 @@ class _CanvasViewState extends State<CanvasView> {
   double? _rotationPointerStart;
   double _rotationValueStart = 0;
   bool _didInitialFit = false;
+  bool _touchElementInteraction = false;
+  Offset? _touchInteractionPoint;
 
   double get _scale => widget.viewportController.zoom;
+
+  void _beginTouchElementInteraction(Offset globalPosition) {
+    _touchInteractionPoint = _pagePointFromGlobal(globalPosition);
+    if (_touchElementInteraction || !mounted) return;
+    setState(() => _touchElementInteraction = true);
+  }
+
+  Offset? _touchCanvasDelta(Offset globalPosition) {
+    final current = _pagePointFromGlobal(globalPosition);
+    final previous = _touchInteractionPoint;
+    _touchInteractionPoint = current;
+    if (current == null || previous == null) return null;
+    return current - previous;
+  }
+
+  void _endTouchElementInteraction() {
+    _touchInteractionPoint = null;
+    if (!_touchElementInteraction || !mounted) return;
+    setState(() => _touchElementInteraction = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -144,8 +166,8 @@ class _CanvasViewState extends State<CanvasView> {
               return InteractiveViewer(
                 transformationController: _transform,
                 constrained: false,
-                panEnabled: touchMode,
-                scaleEnabled: touchMode,
+                panEnabled: touchMode && !_touchElementInteraction,
+                scaleEnabled: touchMode && !_touchElementInteraction,
                 minScale: .20,
                 maxScale: 4,
                 boundaryMargin: const EdgeInsets.all(1000),
@@ -266,6 +288,7 @@ class _CanvasViewState extends State<CanvasView> {
         selected && controller.selectedId == element.id;
     final cropping =
         primary && controller.isCropping(element.id);
+    final touch = MediaQuery.sizeOf(context).shortestSide < 700;
 
     return Positioned(
       left: element.x,
@@ -304,7 +327,10 @@ class _CanvasViewState extends State<CanvasView> {
                   ),
           onPanStart: widget.previewMode || element.locked
               ? null
-              : (_) {
+              : (details) {
+                  if (touch) {
+                    _beginTouchElementInteraction(details.globalPosition);
+                  }
                   if (!controller.selectedIds.contains(element.id)) {
                     final keyboard = HardwareKeyboard.instance;
                     final additive =
@@ -319,17 +345,31 @@ class _CanvasViewState extends State<CanvasView> {
           onPanUpdate: widget.previewMode || element.locked
               ? null
               : (details) {
-                  final dx = details.delta.dx / _scale;
-                  final dy = details.delta.dy / _scale;
+                  final delta = touch
+                      ? _touchCanvasDelta(details.globalPosition)
+                      : Offset(
+                          details.delta.dx / _scale,
+                          details.delta.dy / _scale,
+                        );
+                  if (delta == null) return;
                   if (controller.isCropping(element.id)) {
-                    controller.panImage(element.id, dx, dy);
+                    controller.panImage(element.id, delta.dx, delta.dy);
                   } else {
-                    controller.moveBy(element.id, dx, dy);
+                    controller.moveBy(element.id, delta.dx, delta.dy);
                   }
                 },
           onPanEnd: widget.previewMode || element.locked
               ? null
-              : (_) => controller.commitLiveEdit(),
+              : (_) {
+                  if (touch) _endTouchElementInteraction();
+                  controller.commitLiveEdit();
+                },
+          onPanCancel: widget.previewMode || element.locked
+              ? null
+              : () {
+                  if (touch) _endTouchElementInteraction();
+                  controller.commitLiveEdit();
+                },
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -582,16 +622,37 @@ class _CanvasViewState extends State<CanvasView> {
         cursor: handle.cursor,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanUpdate: (details) => widget.controller.resizeBy(
-            element.id,
-            dx: details.delta.dx / _scale,
-            dy: details.delta.dy / _scale,
-            left: handle.h == -1,
-            right: handle.h == 1,
-            top: handle.v == -1,
-            bottom: handle.v == 1,
-          ),
-          onPanEnd: (_) => widget.controller.commitLiveEdit(),
+          onPanStart: (details) {
+            if (touch) {
+              _beginTouchElementInteraction(details.globalPosition);
+            }
+          },
+          onPanUpdate: (details) {
+            final delta = touch
+                ? _touchCanvasDelta(details.globalPosition)
+                : Offset(
+                    details.delta.dx / _scale,
+                    details.delta.dy / _scale,
+                  );
+            if (delta == null) return;
+            widget.controller.resizeBy(
+              element.id,
+              dx: delta.dx,
+              dy: delta.dy,
+              left: handle.h == -1,
+              right: handle.h == 1,
+              top: handle.v == -1,
+              bottom: handle.v == 1,
+            );
+          },
+          onPanEnd: (_) {
+            if (touch) _endTouchElementInteraction();
+            widget.controller.commitLiveEdit();
+          },
+          onPanCancel: () {
+            if (touch) _endTouchElementInteraction();
+            widget.controller.commitLiveEdit();
+          },
           child: Center(
             child: Container(
               width: visual,
@@ -625,6 +686,9 @@ class _CanvasViewState extends State<CanvasView> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onPanStart: (details) {
+            if (touch) {
+              _beginTouchElementInteraction(details.globalPosition);
+            }
             final point = _pagePointFromGlobal(details.globalPosition);
             if (point == null) return;
             final center = Offset(
@@ -657,6 +721,12 @@ class _CanvasViewState extends State<CanvasView> {
           },
           onPanEnd: (_) {
             _rotationPointerStart = null;
+            if (touch) _endTouchElementInteraction();
+            widget.controller.commitLiveEdit();
+          },
+          onPanCancel: () {
+            _rotationPointerStart = null;
+            if (touch) _endTouchElementInteraction();
             widget.controller.commitLiveEdit();
           },
           child: Center(
