@@ -1065,16 +1065,66 @@ class EditorController extends ChangeNotifier {
             y: targetBottom - element.height,
           ),
       };
-      return _withResolvedGeometry(
+      var updated = _withResolvedGeometry(
         raw,
         x: next.x,
         y: next.y,
         width: next.width,
         height: next.height,
       );
+
+      // Aligning a single object to the canvas also pins that axis to the
+      // chosen side. This makes the visual alignment a real responsive
+      // anchor instead of a one-off coordinate change.
+      if (selected.length == 1) {
+        final anchorX = switch (alignment) {
+          SelectionAlignment.left => 'left',
+          SelectionAlignment.horizontalCenter => 'center',
+          SelectionAlignment.right => 'right',
+          _ => null,
+        };
+        final anchorY = switch (alignment) {
+          SelectionAlignment.top => 'top',
+          SelectionAlignment.verticalCenter => 'center',
+          SelectionAlignment.bottom => 'bottom',
+          _ => null,
+        };
+        updated = _withResolvedAnchors(
+          updated,
+          anchorX: anchorX,
+          anchorY: anchorY,
+        );
+      }
+      return updated;
     }).toList();
 
     _replacePage(page.copyWith(elements: elements), commit: true);
+  }
+
+  WebElement _withResolvedAnchors(
+    WebElement raw, {
+    String? anchorX,
+    String? anchorY,
+  }) {
+    if (anchorX == null && anchorY == null) return raw;
+
+    if (_activeBreakpoint == WebBreakpoint.desktop) {
+      return raw.copyWith(
+        anchorX: anchorX ?? raw.anchorX,
+        anchorY: anchorY ?? raw.anchorY,
+      );
+    }
+
+    final map = Map<WebBreakpoint, WebElementBreakpointOverride>.from(
+      raw.responsiveOverrides,
+    );
+    final current =
+        map[_activeBreakpoint] ?? const WebElementBreakpointOverride();
+    map[_activeBreakpoint] = current.copyWith(
+      anchorX: anchorX,
+      anchorY: anchorY,
+    );
+    return raw.copyWith(responsiveOverrides: map);
   }
 
   void distributeSelection(SelectionDistribution distribution) {
