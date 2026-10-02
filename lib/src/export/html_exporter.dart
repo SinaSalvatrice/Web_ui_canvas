@@ -510,10 +510,18 @@ $body
       }
     }
 
-    if (resolved.textHighlightColor != null ||
+    final hasTextEffect = resolved.textHighlightColor != null ||
         resolved.textStrokeColor != null ||
-        resolved.textStrokeWidth > 0) {
-      buffer.writeln('$indent}');
+        resolved.textStrokeWidth > 0;
+
+    _writeContainerLayout(buffer, element, indent);
+
+    if (resolved.type == WebElementType.image) {
+      buffer.writeln('$indent  overflow: hidden;');
+    }
+    buffer.writeln('$indent}');
+
+    if (hasTextEffect) {
       buffer.writeln('$indent#${resolved.id} > .webui-text {');
       if (resolved.textHighlightColor != null) {
         buffer.writeln(
@@ -525,16 +533,10 @@ $body
           ..writeln(
             '$indent  -webkit-text-stroke: ${resolved.textStrokeWidth}px ${_color(resolved.textStrokeColor!)};',
           )
-          ..writeln('  paint-order: stroke fill;');
+          ..writeln('$indent  paint-order: stroke fill;');
       }
+      buffer.writeln('$indent}');
     }
-
-    _writeContainerLayout(buffer, element, indent);
-
-    if (resolved.type == WebElementType.image) {
-      buffer.writeln('$indent  overflow: hidden;');
-    }
-    buffer.writeln('$indent}');
 
     if (resolved.pressScaleEnabled) {
       buffer
