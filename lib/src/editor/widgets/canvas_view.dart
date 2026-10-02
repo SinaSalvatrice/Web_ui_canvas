@@ -1060,6 +1060,7 @@ class _CanvasViewState extends State<CanvasView> {
   TextAlign _textAlign(String value) => switch (value) {
         'center' => TextAlign.center,
         'right' => TextAlign.right,
+        'justify' => TextAlign.justify,
         _ => TextAlign.left,
       };
 
