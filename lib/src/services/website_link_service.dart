@@ -296,6 +296,14 @@ class WebsiteLinkService {
           continue;
         }
 
+        if (tag == 'input' && stack.isNotEmpty) {
+          final classes = _attr(token, 'class') ?? '';
+          if (classes.split(RegExp(r'\s+')).contains('webui-input-control')) {
+            stack.last.node.text = _attr(token, 'placeholder') ?? '';
+            continue;
+          }
+        }
+
         if (!_supportedTag(tag)) continue;
 
         var id = _attr(token, 'id');
@@ -368,6 +376,7 @@ class WebsiteLinkService {
 
   WebElementType _typeFor(String tag, String classes) {
     if (classes.contains('webui-image-frame')) return WebElementType.image;
+    if (classes.contains('webui-input-frame')) return WebElementType.input;
     if (classes.contains('webui-toggle')) return WebElementType.toggle;
     return switch (tag) {
       'button' || 'a' => WebElementType.button,
