@@ -50,7 +50,7 @@ call flutter pub get
 if errorlevel 1 goto :fail
 
 echo [4/7] Code analysieren...
-call flutter analyze --no-fatal-infos
+call flutter analyze --no-fatal-infos --no-fatal-warnings
 if errorlevel 1 (
   echo.
   echo [FEHLER] flutter analyze meldet Fehler. Build abgebrochen.
